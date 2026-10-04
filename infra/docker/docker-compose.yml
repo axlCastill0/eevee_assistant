@@ -1,0 +1,11 @@
+services:
+  backend:
+    build:
+      # Context is repo root so the Dockerfile can copy apps/backend/
+      context: ../..
+      dockerfile: infra/docker/backend/Dockerfile
+    restart: always
+    network_mode: host
+    env_file:
+      - path: .env
+        required: false
