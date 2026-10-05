@@ -21,7 +21,7 @@ from typing import Optional
 
 log = logging.getLogger("fastpath")
 
-# Filler that may trail an utterance ("is the backend running right now").
+# Filler that may trail an utterance ("is everything ok right now").
 # Stripped from the whole probe BEFORE matching, because the rules below use
 # fullmatch and trailing filler would otherwise defeat every one of them.
 # Applied repeatedly, so stacked filler ("running right now please") also goes.
@@ -42,6 +42,9 @@ def _strip_trailing(text: str) -> str:
             return text
         text = stripped
 
+# Words meaning "working", used by several health patterns.
+_OK = r"(ok|okay|good|alright|all\s*right|fine|working|healthy|up|running|online)"
+
 # Each entry: (compiled pattern, intent, item-capture-group or None).
 # Patterns are fullmatch-anchored against the cleaned transcript.
 _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
@@ -53,30 +56,28 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     (re.compile(r"(tell|give)\s+me\s+the\s+time", re.I), "get_time", None),
     (re.compile(r"current\s+time", re.I), "get_time", None),
 
-    # -- list_services ----------------------------------------------------
-    (re.compile(r"(list|what)\s+(are\s+the\s+)?services", re.I), "list_services", None),
-    (re.compile(r"what\s+services\s+(do\s+you\s+know|do\s+you\s+have"
-                r"|are\s+there|are\s+running|exist)", re.I),
-     "list_services", None),
-    (re.compile(r"what('?s| is)\s+running", re.I), "list_services", None),
-    (re.compile(r"(list|show)\s+(me\s+)?(the\s+)?services", re.I), "list_services", None),
+    # -- system_health ----------------------------------------------------
+    # There is exactly one health intent, covering every service at once, so
+    # these patterns do not capture a subject.
 
-    # -- service_status ---------------------------------------------------
-    # "is the backend running" / "is voice up"
-    (re.compile(r"is\s+(?:the\s+)?(?P<item>.+?)\s+(running|up|online|alive|healthy|ok|okay)", re.I),
-     "service_status", "item"),
-    # "status of voice" / "what's the status of the api"
-    (re.compile(r"(what('?s| is)\s+the\s+)?status\s+(of|for)\s+(?:the\s+)?(?P<item>.+)", re.I),
-     "service_status", "item"),
-    # "check voice" / "check on the backend"
-    (re.compile(r"check\s+(on\s+)?(?:the\s+)?(?P<item>.+)", re.I),
-     "service_status", "item"),
-    # "how is voice doing"
-    (re.compile(r"how('?s| is)\s+(?:the\s+)?(?P<item>.+?)(\s+doing)?", re.I),
-     "service_status", "item"),
-    # "voice status"
-    (re.compile(r"(?:the\s+)?(?P<item>.+?)\s+status", re.I),
-     "service_status", "item"),
+    # "is everything ok" / "everything good" / "are all systems good"
+    (re.compile(rf"(is|are)?\s*(everything|everthing|all\s+systems|all\s+services|"
+                rf"all\s+good|we\s+good)\s*{_OK}?", re.I), "system_health", None),
+    # "system health" / "health check" / "systems check" / "health"
+    (re.compile(r"(system|systems)?\s*health(\s+check)?", re.I), "system_health", None),
+    (re.compile(r"(system|systems)\s+(check|status)", re.I), "system_health", None),
+    # "status" / "what's the status"
+    (re.compile(r"(what('?s| is)\s+the\s+)?status", re.I), "system_health", None),
+    # "is anything down" / "anything down" / "what's down"
+    (re.compile(r"(is\s+)?(anything|something)\s+(down|broken|offline|failing)", re.I),
+     "system_health", None),
+    (re.compile(r"what('?s| is)\s+(down|broken|offline)", re.I), "system_health", None),
+    # "how are things" / "how are we doing"
+    (re.compile(r"how\s+(are|is)\s+(things|we|everything)(\s+doing)?", re.I),
+     "system_health", None),
+    # "check the services" / "check everything"
+    (re.compile(r"check\s+(on\s+)?(the\s+)?(services|systems|everything|health)", re.I),
+     "system_health", None),
 ]
 
 

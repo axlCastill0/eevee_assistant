@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+import services
+
 
 @dataclass(frozen=True)
 class Intent:
@@ -23,14 +25,12 @@ class Intent:
 
 
 INTENTS: dict[str, Intent] = {
-    "service_status": Intent(
-        name="service_status",
-        description="ask whether a named service is running or healthy",
-        needs_item=True,
-    ),
-    "list_services": Intent(
-        name="list_services",
-        description="ask which services exist or what is running",
+    "system_health": Intent(
+        name="system_health",
+        description=(
+            "ask whether everything is working, or which services are down. "
+            "covers health, status and 'is everything ok' questions"
+        ),
         needs_item=False,
     ),
     "get_time": Intent(
@@ -50,66 +50,26 @@ INTENTS: dict[str, Intent] = {
 
 
 # ---------------------------------------------------------------------------
-# Service registry
-# ---------------------------------------------------------------------------
-# Only `backend` is self-reported today. Anything else is declared but has no
-# real health probe yet — handle() says so out loud rather than inventing a
-# status. Wire real probes here as services come online.
-KNOWN_SERVICES: dict[str, str] = {
-    "backend": "live",       # if this code is running, the backend is up
-    "voice": "declared",     # voice pipeline; no probe yet
-}
-
-_ALIASES: dict[str, str] = {
-    "api": "backend",
-    "the api": "backend",
-    "server": "backend",
-    "voice pipeline": "voice",
-    "voice assistant": "voice",
-    "assistant": "voice",
-}
-
-
-def _resolve_service(item: str) -> Optional[str]:
-    key = item.strip().lower()
-    key = _ALIASES.get(key, key)
-    return key if key in KNOWN_SERVICES else None
-
-
-# ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
 # Handlers return the exact sentence to speak. Response text is composed here,
-# in Python, never by the language model — a small model will happily state a
-# service is running without having looked.
+# in Python, never by the language model — a small model will happily state
+# that everything is fine without having looked.
 
 
 def handle(intent: str, item: Optional[str]) -> tuple[str, bool]:
     """Execute `intent` and return (speech, ok).
 
-    `ok` is False when the intent was not understood or could not be served;
-    `speech` is always safe to say verbatim.
+    `speech` is always safe to say verbatim. `ok` reports whether the request
+    was served, not whether the news was good — a successful health check that
+    finds a service down still returns ok=True.
     """
+    if intent == "system_health":
+        speech, _all_healthy = services.summarize()
+        return speech, True
+
     if intent == "get_time":
         # %-I is glibc-specific (no zero padding); this runs on Debian.
         return f"It is {datetime.now().strftime('%-I:%M %p').lower()}.", True
-
-    if intent == "list_services":
-        names = ", ".join(sorted(KNOWN_SERVICES))
-        return f"I know about {names}.", True
-
-    if intent == "service_status":
-        if not item:
-            return "Which service?", False
-
-        resolved = _resolve_service(item)
-        if resolved is None:
-            return f"I don't know a service called {item}.", False
-
-        state = KNOWN_SERVICES[resolved]
-        if state == "live":
-            return f"{resolved} is running.", True
-        # Declared but unprobed. Say that honestly.
-        return f"I can't check {resolved} yet. No health probe is wired up.", False
 
     return "Sorry, I didn't catch that.", False

@@ -18,6 +18,7 @@ import sounddevice as sd
 from . import config
 from .api_client import BackendClient
 from .fastpath import FastPath
+from .heartbeat import Heartbeat
 from .helpers import downsample_mic, preprocess_transcript
 from .recorder import CommandRecorder
 from .stt import load_whisper, transcribe
@@ -38,6 +39,12 @@ class VoiceAssistant:
         # grammar and the fast path. A failure here is survivable.
         self.api = BackendClient()
         self.catalog = self.api.fetch_intents()
+
+        # Start beating before the slow model loads, not after. Loading the
+        # 1.5B model takes long enough that the backend would otherwise report
+        # voice as down for the whole startup window.
+        self.heartbeat = Heartbeat(self.api)
+        self.heartbeat.start()
 
         self.wake_word = WakeWordDetector()
         self.vad = SileroVAD()
@@ -147,6 +154,9 @@ class VoiceAssistant:
         return intent, item
 
     def close(self) -> None:
+        # Stop beating before closing the client, or the heartbeat thread can
+        # fire a request into a closed transport on the way out.
+        self.heartbeat.stop()
         self.api.close()
 
 

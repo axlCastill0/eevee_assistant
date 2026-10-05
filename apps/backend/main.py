@@ -11,7 +11,7 @@ except ImportError:
     pass
 
 from auth import require_api_key
-from routes import voice
+from routes import status, voice
 
 # Uvicorn configures its own loggers but not the root logger, so module-level
 # loggers (routes.voice, intents) would otherwise be silent.
@@ -24,6 +24,8 @@ logging.basicConfig(
 app = FastAPI(title="Eevee Assistant Backend")
 
 app.include_router(voice.router, prefix="/voice", tags=["voice"])
+# No prefix: /services is system-wide, not scoped to a subsystem.
+app.include_router(status.router, tags=["status"])
 
 @app.get("/", dependencies=[Depends(require_api_key)])
 def root():

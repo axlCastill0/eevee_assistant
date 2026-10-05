@@ -158,6 +158,12 @@ API_RETRIES = _int("VOICE_API_RETRIES", 2)
 # answer "the backend is not responding".
 INTENTS_FETCH_TIMEOUT_S = _float("VOICE_INTENTS_FETCH_TIMEOUT_S", 3.0)
 
+# How often to tell the backend this pipeline is alive. The backend marks voice
+# down after 45 s of silence (services.STALE_AFTER_S), so this must stay a
+# comfortable fraction of that — 15 s allows two dropped beats before flapping.
+# Set to 0 to disable.
+HEARTBEAT_INTERVAL_S = _float("VOICE_HEARTBEAT_INTERVAL_S", 15.0)
+
 # ============================================================================
 # FAST PATH
 # ============================================================================

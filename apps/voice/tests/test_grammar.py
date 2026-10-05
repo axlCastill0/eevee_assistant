@@ -13,8 +13,8 @@ from voice_assistant.slm import build_grammar_text as _build
 
 
 def test_includes_every_intent():
-    text = _build(["service_status", "get_time", "unknown"])
-    for name in ("service_status", "get_time", "unknown"):
+    text = _build(["system_health", "get_time", "unknown"])
+    for name in ("system_health", "get_time", "unknown"):
         assert f'\\"{name}\\"' in text
 
 

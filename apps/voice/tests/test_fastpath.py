@@ -11,7 +11,7 @@ import pytest
 
 from voice_assistant.fastpath import FastPath
 
-INTENTS = ["service_status", "list_services", "get_time", "unknown"]
+INTENTS = ["system_health", "get_time", "unknown"]
 
 
 @pytest.fixture(scope="module")
@@ -21,37 +21,44 @@ def fp():
 
 HITS = [
     # -- get_time ---------------------------------------------------------
-    ("what time is it", "get_time", None),
-    ("what's the time", "get_time", None),
-    ("the time", "get_time", None),
-    ("time", "get_time", None),
-    ("current time", "get_time", None),
-    ("tell me the time", "get_time", None),
-    ("give me the time please", "get_time", None),
+    ("what time is it", "get_time"),
+    ("what's the time", "get_time"),
+    ("the time", "get_time"),
+    ("time", "get_time"),
+    ("current time", "get_time"),
+    ("tell me the time", "get_time"),
+    ("give me the time please", "get_time"),
 
-    # -- list_services ----------------------------------------------------
-    ("list services", "list_services", None),
-    ("what services do you know about", "list_services", None),
-    ("what services are there", "list_services", None),
-    ("what services do you have", "list_services", None),
-    ("what is running", "list_services", None),
-    ("what's running", "list_services", None),
-    ("show me the services", "list_services", None),
-
-    # -- service_status ---------------------------------------------------
-    ("is the backend running", "service_status", "backend"),
-    ("is voice up", "service_status", "voice"),
-    ("is the backend running right now", "service_status", "backend"),
-    ("is voice up yet", "service_status", "voice"),
-    ("is the voice pipeline healthy", "service_status", "voice pipeline"),
-    ("status of voice", "service_status", "voice"),
-    ("what is the status of the api", "service_status", "api"),
-    ("what's the status for voice", "service_status", "voice"),
-    ("check on the backend", "service_status", "backend"),
-    ("check voice please", "service_status", "voice"),
-    ("how is voice doing", "service_status", "voice"),
-    ("how's the backend", "service_status", "backend"),
-    ("voice status", "service_status", "voice"),
+    # -- system_health ----------------------------------------------------
+    ("is everything ok", "system_health"),
+    ("is everything okay", "system_health"),
+    ("is everything good", "system_health"),
+    ("everything good", "system_health"),
+    ("everything ok", "system_health"),
+    ("is everything working", "system_health"),
+    ("is everything healthy", "system_health"),
+    ("are all systems good", "system_health"),
+    ("all systems ok", "system_health"),
+    ("are all services up", "system_health"),
+    ("health", "system_health"),
+    ("health check", "system_health"),
+    ("system health", "system_health"),
+    ("systems check", "system_health"),
+    ("system status", "system_health"),
+    ("status", "system_health"),
+    ("what's the status", "system_health"),
+    ("is anything down", "system_health"),
+    ("anything down", "system_health"),
+    ("is something broken", "system_health"),
+    ("anything offline", "system_health"),
+    ("what's down", "system_health"),
+    ("how are things", "system_health"),
+    ("how are things doing", "system_health"),
+    ("how is everything", "system_health"),
+    ("how are we doing", "system_health"),
+    ("check the services", "system_health"),
+    ("check everything", "system_health"),
+    ("check health", "system_health"),
 ]
 
 # Must fall through to the SLM. A hit on any of these is a bug.
@@ -61,18 +68,23 @@ MISSES = [
     "play some music",
     "what is the weather",
     "set a timer for five minutes",
-    "is it",          # pronoun-only item
-    "check it",       # pronoun-only item
+    "restart the voice pipeline",   # an action, not a query
+    "shut everything down",         # an action, and dangerously close to health
+    "is it",
+    "check it",
     "check that",
     "",
 ]
 
 
-@pytest.mark.parametrize("text,intent,item", HITS)
-def test_hits(fp, text, intent, item):
+@pytest.mark.parametrize("text,intent", HITS)
+def test_hits(fp, text, intent):
     result = fp.match(text)
     assert result is not None, f"{text!r} should have matched"
-    assert result == (intent, item)
+    got_intent, got_item = result
+    assert got_intent == intent
+    # No current intent takes an item, so a captured item is a bug.
+    assert got_item is None, f"{text!r} captured an unexpected item {got_item!r}"
 
 
 @pytest.mark.parametrize("text", MISSES)
@@ -89,11 +101,11 @@ def test_rules_pruned_to_advertised_intents():
     """A fast path must never emit an intent the API does not advertise."""
     limited = FastPath(["get_time", "unknown"])
     assert limited.match("what time is it") == ("get_time", None)
-    # service_status is not advertised, so its rules are inactive.
-    assert limited.match("is the backend running") is None
+    # system_health is not advertised, so its rules are inactive.
+    assert limited.match("is everything ok") is None
 
 
 def test_trailing_filler_tolerated(fp):
     """Rules use fullmatch, so trailing filler must be stripped beforehand."""
-    for text in ("is the backend running right now", "check voice please"):
+    for text in ("is everything ok right now", "status please", "health check again"):
         assert fp.match(text) is not None, f"{text!r} should match despite filler"

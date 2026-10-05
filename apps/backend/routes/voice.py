@@ -2,7 +2,9 @@
 
 The voice pipeline (apps/voice/) runs in a separate container and talks to
 these endpoints over HTTP. It must be able to fail without affecting the API,
-so nothing here holds state belonging to the pipeline.
+so nothing here holds state belonging to the pipeline — only the timestamp of
+its last heartbeat, which is what lets the backend report the pipeline as down
+when it stops checking in.
 """
 import logging
 from typing import Optional
@@ -10,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+import services
 from auth import require_api_key
 from intents import INTENTS, handle
 
@@ -35,7 +38,19 @@ class IntentResponse(BaseModel):
 
 @router.get("/health")
 def voice_health():
+    """Liveness of this route. Does NOT report pipeline health — see /services."""
     return {"status": "ok", "route": "voice"}
+
+
+@router.post("/heartbeat")
+def voice_heartbeat():
+    """Called by the pipeline on a timer to prove it is alive.
+
+    Health is inferred from these check-ins stopping, because a dead pipeline
+    cannot answer a probe or report its own failure.
+    """
+    services.record_heartbeat("voice")
+    return {"status": "ok", "stale_after_s": services.STALE_AFTER_S}
 
 
 @router.get("/intents")

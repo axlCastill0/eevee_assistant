@@ -36,24 +36,30 @@ Valid intents:
 
 Rules:
 - Pick exactly one intent. Never invent intent names.
-- "item" is the service or subject being asked about, lowercase, no articles.
+- "item" is the subject being asked about, lowercase, no articles. No current
+  intent takes one, so "item" is null unless a listed intent clearly needs it.
 - For intents that take no item, "item" MUST be null.
+- Health questions cover ALL services at once. "is the voice pipeline up" is
+  still system_health with item null, not a per-service query.
 - If the request does not clearly match an intent, return "unknown" with item null.
 - Output ONLY the JSON object. No prose, no explanation.
 
 Examples:
 
-User: "is the backend running"
-Output: {{"intent": "service_status", "item": "backend"}}
+User: "is everything ok"
+Output: {{"intent": "system_health", "item": null}}
 
-User: "what's the status of the api"
-Output: {{"intent": "service_status", "item": "backend"}}
+User: "are all systems good"
+Output: {{"intent": "system_health", "item": null}}
 
-User: "check on the voice pipeline"
-Output: {{"intent": "service_status", "item": "voice"}}
+User: "is anything down"
+Output: {{"intent": "system_health", "item": null}}
 
-User: "what services do you know about"
-Output: {{"intent": "list_services", "item": null}}
+User: "how are things looking"
+Output: {{"intent": "system_health", "item": null}}
+
+User: "is the voice pipeline healthy"
+Output: {{"intent": "system_health", "item": null}}
 
 User: "what time is it"
 Output: {{"intent": "get_time", "item": null}}

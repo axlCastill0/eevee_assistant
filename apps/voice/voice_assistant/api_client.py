@@ -23,9 +23,8 @@ log = logging.getLogger("api")
 # startup. The API's /voice/intents is the real source of truth; this exists so
 # the pipeline can still boot and still say "the backend is not responding".
 FALLBACK_INTENTS: dict[str, dict] = {
-    "service_status": {"description": "ask whether a named service is running",
-                       "needs_item": True},
-    "list_services": {"description": "ask which services exist", "needs_item": False},
+    "system_health": {"description": "ask whether everything is working",
+                      "needs_item": False},
     "get_time": {"description": "ask for the current time", "needs_item": False},
     "unknown": {"description": "anything else", "needs_item": False},
 }
@@ -55,7 +54,10 @@ class IntentCatalog:
 class BackendClient:
     """Thin wrapper over the API. All methods are failure-tolerant.
 
-"""
+    Shared between the main pipeline thread and the heartbeat thread.
+    httpx.Client is thread-safe for concurrent requests, so one instance is
+    enough; do not add per-call mutable state to this class.
+    """
 
     def __init__(self,
                  base_url: str = config.API_BASE_URL,
@@ -112,6 +114,23 @@ class BackendClient:
     def health(self) -> bool:
         resp = self._request("GET", "/voice/health")
         return resp is not None and resp.status_code == 200
+
+    def heartbeat(self) -> bool:
+        """Report that this pipeline is alive. Returns whether it landed.
+
+        Sent with no retries: another beat is due shortly, so retrying a failed
+        one only risks piling up requests against a struggling backend.
+        """
+        try:
+            resp = self._client.post("/voice/heartbeat")
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            log.debug("Heartbeat failed: %s", exc)
+            return False
+
+        if resp.status_code != 200:
+            log.debug("Heartbeat rejected: %d", resp.status_code)
+            return False
+        return True
 
     def fetch_intents(self) -> IntentCatalog:
         """Fetch the intent catalogue. Falls back to the baked-in list."""
