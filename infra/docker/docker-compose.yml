@@ -9,3 +9,44 @@ services:
     env_file:
       - path: .env
         required: false
+
+  voice:
+    build:
+      context: ../..
+      dockerfile: infra/docker/voice/Dockerfile
+      args:
+        # Must match `getent group audio` on the Pi, or /dev/snd is unreadable.
+        AUDIO_GID: "${AUDIO_GID:-29}"
+
+    # Deliberately NOT `depends_on: backend`. The two services are independent:
+    # the API must survive a broken pipeline, and the pipeline boots and reports
+    # the outage out loud when the API is down. Adding depends_on here would
+    # couple their lifecycles back together.
+
+    # `unless-stopped` rather than `always`, unlike the backend: a missing model
+    # file makes this exit non-zero, and `always` would restart-loop it
+    # indefinitely. This way `docker compose stop voice` sticks while debugging.
+    restart: unless-stopped
+
+    # Host networking so the pipeline reaches the API on 127.0.0.1:8000, and
+    # because it is the project-wide convention on this Pi.
+    network_mode: host
+
+    # ALSA access for the USB mic and speaker.
+    devices:
+      - /dev/snd:/dev/snd
+
+    volumes:
+      # Large models live outside the image: Qwen2.5-1.5B-Q5 (~1.2 GB), the
+      # Piper voice and the Silero VAD. Read-only — the pipeline never writes
+      # here. Populate with scripts/fetch-voice-models.sh.
+      - ../../models:/app/models:ro
+
+    env_file:
+      - path: .env
+        required: false
+
+    # Qwen2.5-1.5B-Q5 is ~1.2 GB resident, plus Whisper and Piper. The cap is
+    # a guard against a leak taking the whole Pi down with the API on it;
+    # raise it if you move to a larger model.
+    mem_limit: 2560m

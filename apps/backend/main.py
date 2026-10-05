@@ -1,3 +1,6 @@
+import logging
+import os
+
 from fastapi import FastAPI, Depends
 
 try:
@@ -9,6 +12,14 @@ except ImportError:
 
 from auth import require_api_key
 from routes import voice
+
+# Uvicorn configures its own loggers but not the root logger, so module-level
+# loggers (routes.voice, intents) would otherwise be silent.
+logging.basicConfig(
+    level=logging.DEBUG if os.environ.get("BACKEND_VERBOSE") else logging.INFO,
+    format="%(asctime)s [%(name)-12s] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 app = FastAPI(title="Eevee Assistant Backend")
 

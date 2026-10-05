@@ -1,0 +1,29 @@
+# Pinned to minor versions: this runs unattended on a Pi and a silent
+# dependency bump is harder to debug than an explicit one.
+#
+# llama-cpp-python needs the CPU wheel index to avoid a 10-minute source build
+# on aarch64. It is passed on the pip command line in the Dockerfile, not here,
+# because Docker's layer cache handles it better as an explicit flag.
+
+# Audio I/O
+sounddevice~=0.4
+numpy~=1.26
+scipy~=1.13
+
+# Wake word (pulls in onnxruntime, reused by the VAD)
+openwakeword~=0.6
+
+# Speech-to-text (CTranslate2 backend, no PyTorch)
+faster-whisper~=1.0
+
+# Small language model
+llama-cpp-python~=0.3
+
+# Text-to-speech
+piper-onnx~=0.1
+
+# Backend API calls
+httpx~=0.27
+
+# Optional: .env loading for bare-metal runs (not needed in Docker)
+python-dotenv~=1.0
