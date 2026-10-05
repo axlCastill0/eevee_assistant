@@ -1,0 +1,81 @@
+# nginx config for the dashboard.
+#
+# Two jobs:
+#   1. serve the static bundle
+#   2. reverse-proxy /api/* to the backend, INJECTING the X-API-Key header
+#
+# Job 2 is the reason this container exists rather than serving the bundle from
+# FastAPI. The browser never receives or stores the API key: it calls /api/...
+# on the same origin, and the key is attached here, server side.
+#
+# This file is a template. The entrypoint of the official nginx image runs
+# envsubst over /etc/nginx/templates/*.template at startup. Only the variables
+# named in NGINX_ENVSUBST_FILTER are substituted, so nginx's own $host,
+# $remote_addr and friends survive untouched.
+
+server {
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The kiosk is the only client and it is on this machine; logging every
+    # 3-second poll would write a lot of nothing to the SD card. Errors still
+    # log. SD cards die from writes, so this is not just tidiness.
+    access_log off;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # ---- API proxy ---------------------------------------------------------
+    location /api/ {
+        # Trailing slash on both sides strips the /api prefix:
+        #   /api/services  ->  ${BACKEND_ORIGIN}/services
+        proxy_pass ${BACKEND_ORIGIN}/;
+
+        # The whole point. Set, not add, so a header sent by the browser cannot
+        # override it.
+        proxy_set_header X-API-Key "${API_KEY}";
+
+        proxy_set_header Host $host;
+        proxy_http_version 1.1;
+
+        # Fail fast. The dashboard polls every 3s and shows "unreachable" on
+        # error, so a long hang is worse than a quick failure.
+        proxy_connect_timeout 2s;
+        proxy_send_timeout 5s;
+        proxy_read_timeout 5s;
+
+        # Status is never cacheable.
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # ---- static ------------------------------------------------------------
+    # Vite emits content-hashed filenames, so these can be cached hard.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # index.html must never be cached, or a rebuilt bundle would not be picked
+    # up until the browser decided to revalidate.
+    location = /index.html {
+        add_header Cache-Control "no-store, must-revalidate" always;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Lets the kiosk's health be checked without going through the backend.
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+        add_header Content-Type text/plain;
+    }
+}

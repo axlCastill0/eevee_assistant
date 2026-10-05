@@ -50,3 +50,25 @@ services:
     # a guard against a leak taking the whole Pi down with the API on it;
     # raise it if you move to a larger model.
     mem_limit: 2560m
+
+  ui:
+    build:
+      context: ../..
+      dockerfile: infra/docker/ui/Dockerfile
+
+    # Like voice, NOT `depends_on: backend`. The dashboard's job includes
+    # reporting that the backend is down, which it cannot do if Docker refuses
+    # to start it first.
+    restart: always
+
+    network_mode: host
+
+    environment:
+      # nginx attaches this to every proxied request. It is never served to
+      # the browser — see infra/docker/ui/nginx.conf.template.
+      API_KEY: "${API_KEY:?API_KEY must be set in infra/docker/.env}"
+      BACKEND_ORIGIN: "${BACKEND_ORIGIN:-http://127.0.0.1:8000}"
+
+    # Static files and a proxy. The default nginx worker footprint is already
+    # larger than this needs.
+    mem_limit: 128m

@@ -1,0 +1,29 @@
+.pollring {
+  flex: none;
+  /* -90deg so the sweep starts at twelve o'clock. */
+  transform: rotate(-90deg);
+}
+
+.pollring__track {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  transition: stroke var(--dur-theme) var(--ease);
+}
+
+.pollring__sweep {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 2;
+  stroke-linecap: round;
+  animation: sweep linear infinite;
+  transition: stroke var(--dur) var(--ease);
+}
+
+.pollring.is-stalled .pollring__sweep {
+  stroke: var(--warn);
+  /* Stop the sweep when polls are failing. A ring that keeps spinning while
+     nothing is arriving would be a lie. */
+  animation-play-state: paused;
+  opacity: 0.5;
+}

@@ -1,0 +1,190 @@
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Generous padding and a tall minimum: this is a finger target, not a row
+     in a table. */
+  min-height: 210px;
+  padding: var(--space-5);
+  text-align: left;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+
+  animation: rise var(--dur-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--i) * 60ms);
+
+  transition:
+    transform var(--dur-fast) var(--ease),
+    border-color var(--dur) var(--ease),
+    background-color var(--dur-theme) var(--ease);
+}
+
+/* Press feedback. The only interaction affordance available on touch. */
+.tile:active {
+  transform: scale(0.985);
+  border-color: var(--border-strong);
+}
+
+.tile--down {
+  border-color: color-mix(in srgb, var(--down) 35%, var(--border));
+  background:
+    linear-gradient(160deg, var(--down-wash), transparent 55%),
+    var(--surface-1);
+}
+
+/* ---- head ---- */
+.tile__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tile__name {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.tile__chev {
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  color: var(--text-faint);
+  transition: transform var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.tile:active .tile__chev {
+  transform: translateX(3px);
+  color: var(--text-dim);
+}
+
+/* ---- body ---- */
+.tile__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tile__state {
+  font-size: var(--text-xl);
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--ok);
+  transition: color var(--dur) var(--ease);
+}
+
+.tile__state--down {
+  color: var(--down);
+}
+
+.tile__detail {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+/* ---- metrics ---- */
+.tile__metrics {
+  display: flex;
+  gap: var(--space-6);
+  margin-top: auto;
+}
+
+.tile__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tile__metric-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.tile__metric-value {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text);
+  transition: color var(--dur-theme) var(--ease);
+}
+
+/* ---- sparkline ---- */
+.tile__spark {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.tile__spark > .spark {
+  flex: 1;
+}
+
+.tile__spark-label {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+/* ---- heartbeat pressure ---- */
+.tile__pressure {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--border);
+  transition: background-color var(--dur-theme) var(--ease);
+}
+
+.tile__pressure-fill {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  transform-origin: left center;
+  /* Matches the poll interval so the bar glides instead of stepping. */
+  transition: transform 3000ms linear, background-color var(--dur) var(--ease);
+  will-change: transform;
+}
+
+.tile__pressure-fill.is-warn {
+  background: var(--warn);
+}
+
+.tile--down .tile__pressure-fill {
+  background: var(--down);
+}
+
+/* Compact tiles on short panels. Everything stays — the tile just stops
+   reserving space it does not need. Touch targets are unaffected: the tile is
+   still far larger than the 56px floor. */
+@media (max-height: 700px) {
+  .tile {
+    min-height: 0;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .tile__state {
+    font-size: var(--text-lg);
+  }
+
+  /* "running" / "never checked in" is also shown in the detail sheet, and the
+     Healthy/Down word above already carries the state. */
+  .tile__detail {
+    display: none;
+  }
+
+  .tile__metrics {
+    gap: var(--space-5);
+  }
+
+  .tile__spark-label {
+    display: none;
+  }
+}

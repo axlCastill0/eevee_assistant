@@ -1,0 +1,108 @@
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
+  transition: border-color var(--dur-theme) var(--ease);
+  animation: fade-in var(--dur-slow) var(--ease);
+}
+
+.topbar__left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.topbar__clock {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.topbar__time {
+  font-size: var(--text-3xl);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  /* The accent on the clock is the one place color is used purely for
+     hierarchy rather than status. */
+  color: var(--text);
+  transition: color var(--dur-theme) var(--ease);
+}
+
+.topbar__seconds {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--text-faint);
+  line-height: 1;
+}
+
+.topbar__date {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  letter-spacing: -0.01em;
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.topbar__conn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition:
+    background-color var(--dur-theme) var(--ease),
+    border-color var(--dur-theme) var(--ease);
+}
+
+.topbar__conn-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.topbar__conn-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.topbar__conn-latency {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+@media (max-width: 760px) {
+  .topbar__conn {
+    display: none;
+  }
+}
+
+@media (max-height: 700px) {
+  .topbar {
+    padding-bottom: var(--space-3);
+  }
+
+  /* The clock is the single largest element on the panel; on a short screen
+     it is the first thing that should give back height. */
+  .topbar__time {
+    font-size: var(--text-2xl);
+  }
+}
+
+.topbar__meridiem {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  line-height: 1;
+}

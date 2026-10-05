@@ -1,0 +1,107 @@
+.overview {
+  position: relative;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+
+  animation: rise var(--dur-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--i) * 60ms);
+}
+
+/* A 2px status rail down the left edge. Static gradient, no blur — this is
+   the visual weight that a glass/backdrop-filter treatment would have
+   provided, at zero per-frame cost. */
+.overview::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--rail, var(--border-strong));
+  transition: background-color var(--dur) var(--ease);
+}
+
+.overview--ok {
+  --rail: var(--ok);
+}
+
+.overview--down {
+  --rail: var(--down);
+  /* Static tint, not an animated glow. */
+  background:
+    linear-gradient(90deg, var(--down-wash), transparent 42%),
+    var(--surface-1);
+}
+
+.overview__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.overview__eyebrow {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.overview__stale {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--warn);
+  padding: 2px var(--space-2);
+  background: var(--warn-wash);
+  border-radius: var(--radius-sm);
+}
+
+.overview__headline {
+  font-size: var(--text-2xl);
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  transition: color var(--dur-theme) var(--ease);
+}
+
+.overview__headline--muted {
+  color: var(--text-faint);
+}
+
+.overview__sub {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.overview__sub.mono {
+  color: var(--down);
+}
+
+/* Short panels (1024x600 and similar) have roughly 600px of height to spend.
+   The hero is the biggest consumer, so it gets compact padding and type —
+   enough to still read as the headline, without pushing the tiles off screen. */
+@media (max-height: 700px) {
+  .overview {
+    padding: var(--space-4) var(--space-5);
+    gap: var(--space-1);
+  }
+
+  .overview__headline {
+    font-size: var(--text-xl);
+  }
+
+  /* The subtitle restates what the headline and tiles already show. */
+  .overview__sub {
+    display: none;
+  }
+
+  .overview__sub.mono {
+    display: block;
+  }
+}

@@ -1,0 +1,55 @@
+.dot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  flex: none;
+  /* Isolates the halo's repaints from the rest of the tile. */
+  contain: layout paint;
+}
+
+.dot__core,
+.dot__halo {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: var(--dot-color);
+}
+
+.dot__core {
+  transition: background-color var(--dur) var(--ease);
+}
+
+.dot__halo {
+  opacity: 0;
+  /* Promote to its own layer so the scale animation never repaints siblings. */
+  will-change: transform, opacity;
+}
+
+.dot--ok {
+  --dot-color: var(--ok);
+}
+.dot--warn {
+  --dot-color: var(--warn);
+}
+.dot--down {
+  --dot-color: var(--down);
+}
+.dot--idle {
+  --dot-color: var(--text-faint);
+}
+
+/* Healthy breathes slowly and calmly. */
+.dot--pulse.dot--ok .dot__halo {
+  animation: halo 2.8s var(--ease-out) infinite;
+}
+
+/* Down is faster, so it reads as something asking for attention. */
+.dot--pulse.dot--down .dot__halo {
+  animation: halo-urgent 1.3s var(--ease-out) infinite;
+}
+
+.dot--pulse.dot--warn .dot__halo {
+  animation: halo 2s var(--ease-out) infinite;
+}

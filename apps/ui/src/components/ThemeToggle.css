@@ -1,0 +1,107 @@
+.themetoggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.themetoggle__track {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/* The sliding pill. Positioned by transform, not by left/width, so moving it
+   costs nothing. Width is one third of the track minus the gutters. */
+.themetoggle__indicator {
+  position: absolute;
+  top: var(--space-1);
+  bottom: var(--space-1);
+  left: var(--space-1);
+  width: calc((100% - 2 * var(--space-1) - 2 * var(--space-1)) / 3);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  transform: translate3d(
+    calc(var(--index) * (100% + var(--space-1))),
+    0,
+    0
+  );
+  transition:
+    transform var(--dur) var(--ease),
+    background-color var(--dur-theme) var(--ease),
+    border-color var(--dur-theme) var(--ease);
+  will-change: transform;
+}
+
+.themetoggle__seg {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Touch target: comfortably past the 56px floor on the long axis. */
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  color: var(--text-faint);
+  border-radius: var(--radius);
+  transition: color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+
+.themetoggle__seg.is-active {
+  color: var(--text);
+}
+
+/* Press feedback. Touch has no hover, so :active is the only affordance and
+   it has to be unmistakable. */
+.themetoggle__seg:active {
+  transform: scale(0.96);
+}
+
+.themetoggle__icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+
+.themetoggle__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.themetoggle__label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.themetoggle__hint {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  padding-right: var(--space-2);
+  animation: fade-in var(--dur) var(--ease);
+}
+
+.themetoggle__hint--warn {
+  color: var(--warn);
+}
+
+/* On a narrow panel, drop the text labels and keep the icons — the indicator
+   still communicates which mode is active. */
+@media (max-width: 860px) {
+  .themetoggle__label {
+    display: none;
+  }
+  .themetoggle__seg {
+    justify-content: center;
+    padding: 0 var(--space-3);
+    min-width: var(--touch-min);
+  }
+}

@@ -1,0 +1,51 @@
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  contain: layout paint;
+}
+
+.spark--empty {
+  border-bottom: 1px dashed var(--border);
+}
+
+.spark__bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 1px;
+  transform-origin: bottom center;
+  animation: spark-grow var(--dur) var(--ease-out) backwards;
+  transition: background-color var(--dur) var(--ease);
+}
+
+.spark__bar--ok {
+  height: 100%;
+  background: var(--ok);
+  opacity: 0.85;
+}
+
+.spark__bar--down {
+  /* Short and solid: an outage should be visually obvious as a gap in an
+     otherwise even row. */
+  height: 28%;
+  background: var(--down);
+}
+
+.spark__bar--pad {
+  height: 100%;
+  background: var(--border);
+  opacity: 0.35;
+  animation: none;
+}
+
+@keyframes spark-grow {
+  from {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}

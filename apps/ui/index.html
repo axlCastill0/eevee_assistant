@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- user-scalable=no: a kiosk panel should never pinch-zoom out of layout -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <!-- Painted before React mounts so there is no white flash on a dark boot.
+         Kept in sync with --bg in index.css. -->
+    <meta name="theme-color" content="#08090b" />
+    <title>eevee</title>
+    <style>
+      /* Inline so it applies on the very first frame, before the CSS bundle
+         loads. Prevents a flash of white on the kiosk's cold start. */
+      html { background: #08090b; }
+      html[data-theme='light'] { background: #f7f8f9; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,361 @@
+/* ===========================================================================
+   Eevee — design tokens and base styles
+
+   Aesthetic target: modern developer tooling. Restrained neutral surfaces,
+   one accent, monospace for anything numeric, tight radii, short easing.
+   Not a terminal, not a sci-fi HUD.
+
+   Scaled for TOUCH on a ~10" panel: minimum target 56px, no hover-only
+   affordances, no cursor.
+
+   Pi 5 performance rules enforced throughout:
+     - animate ONLY transform and opacity (compositor-only properties)
+     - no backdrop-filter anywhere (per-frame blur over a large area is the
+       single most expensive thing you can ask this GPU to do)
+     - no animated box-shadow or filter; static shadows only
+   =========================================================================== */
+
+/* Fonts are declared by hand rather than via the package's index.css, which
+   pulls in Cyrillic, Greek and Vietnamese subsets this panel will never
+   render — about 150 KB of woff2 the kiosk would ship and never use. Only the
+   latin upright variable faces are referenced here. No italics: nothing in
+   this UI is italic.
+
+   Self-hosted on purpose. The Pi may boot before the network is up, and a
+   Google Fonts CDN link would leave the dashboard in a fallback face. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: block; /* block, not swap: a reflow on a kiosk is worse than a beat of invisible text */
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 800;
+  src: url('@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------------------------------------------------------------------------
+   Tokens — dark is the default, light overrides below.
+   Every color is a variable so the theme swap is one attribute change on
+   <html> and the CSS transition handles the crossfade.
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, lowest to highest elevation */
+  --bg: #08090b;
+  --surface-1: #0e1014;
+  --surface-2: #14171c;
+  --surface-3: #1b1f26;
+
+  /* Hairlines. Dev tools lean on 1px borders rather than heavy shadows. */
+  --border: #21262e;
+  --border-strong: #2d343e;
+
+  /* Text */
+  --text: #e8eaed;
+  --text-dim: #9aa3af;
+  --text-faint: #6b7280;
+
+  /* Accent — a single hue, used for focus, active states and the clock. */
+  --accent: #4c8dff;
+  --accent-dim: #2a5db8;
+  --accent-wash: rgba(76, 141, 255, 0.1);
+
+  /* Status */
+  --ok: #3ecf8e;
+  --ok-wash: rgba(62, 207, 142, 0.1);
+  --warn: #f5a623;
+  --warn-wash: rgba(245, 166, 35, 0.1);
+  --down: #f6685e;
+  --down-wash: rgba(246, 104, 94, 0.1);
+
+  /* Shadows — static only, never animated. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  /* Type. Numbers use tabular figures everywhere so values do not jitter
+     as digits change. */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /* Fluid scale — the panel resolution is not known yet, so every size is a
+     clamp between a 1024x600 floor and a 1920x1200 ceiling. */
+  --text-xs: clamp(0.6875rem, 0.55vw + 0.5rem, 0.8125rem);
+  --text-sm: clamp(0.8125rem, 0.6vw + 0.6rem, 0.9375rem);
+  --text-base: clamp(0.9375rem, 0.7vw + 0.7rem, 1.0625rem);
+  --text-lg: clamp(1.125rem, 1vw + 0.8rem, 1.375rem);
+  --text-xl: clamp(1.5rem, 1.6vw + 1rem, 2rem);
+  --text-2xl: clamp(2rem, 2.6vw + 1.2rem, 3rem);
+  --text-3xl: clamp(2.75rem, 4.5vw + 1rem, 4.5rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* Touch minimum. Apple says 44px; a finger on a wall panel at arm's length
+     wants more, so 56 is the floor and primary controls are larger. */
+  --touch-min: 56px;
+
+  /* Easing. Dev-tool motion is quick and decisive — no overshoot, no bounce. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+
+  /* How long the theme crossfade takes. Longer than a normal transition so
+     the day/night flip reads as intentional rather than a flicker. */
+  --dur-theme: 600ms;
+}
+
+/* Light theme. Not an inversion — surfaces get warmer and the accent darkens
+   so it keeps contrast against a pale background. */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f7f8f9;
+  --surface-1: #ffffff;
+  --surface-2: #fbfbfc;
+  --surface-3: #f2f3f5;
+
+  --border: #e3e5e9;
+  --border-strong: #cfd3da;
+
+  --text: #15181d;
+  --text-dim: #5c6471;
+  --text-faint: #8b93a1;
+
+  --accent: #2563eb;
+  --accent-dim: #93b4fb;
+  --accent-wash: rgba(37, 99, 235, 0.08);
+
+  --ok: #17946b;
+  --ok-wash: rgba(23, 148, 107, 0.09);
+  --warn: #b26a00;
+  --warn-wash: rgba(178, 106, 0, 0.09);
+  --down: #d93a2e;
+  --down-wash: rgba(217, 58, 46, 0.09);
+
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 4px 16px rgba(16, 24, 40, 0.08);
+}
+
+/* ---------------------------------------------------------------------------
+   Reset and base
+   --------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  /* The theme crossfade. Only these two properties transition on body;
+     each component transitions its own colors. */
+  transition:
+    background-color var(--dur-theme) var(--ease),
+    color var(--dur-theme) var(--ease);
+}
+
+/* Kiosk hygiene: no cursor, no text selection, no tap highlight, no
+   double-tap zoom delay, no overscroll rubber-banding. */
+body {
+  cursor: none;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* Numbers never jitter. */
+.mono,
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: none;
+  touch-action: manipulation;
+}
+
+/* Focus rings stay for the occasional plugged-in keyboard, but never show
+   on touch. :focus-visible handles that distinction for us. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Every surface shares the same theme crossfade so nothing lags behind. */
+.themed {
+  transition:
+    background-color var(--dur-theme) var(--ease),
+    border-color var(--dur-theme) var(--ease),
+    color var(--dur-theme) var(--ease);
+}
+
+/* ---------------------------------------------------------------------------
+   Keyframes — all transform/opacity only
+   --------------------------------------------------------------------------- */
+
+/* Tile entrance. Driven by a per-tile --i index for the stagger. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Healthy status dot: a slow, calm breathe. The halo is a separate element
+   scaling up and fading out, so no filter or shadow animation is involved. */
+@keyframes halo {
+  0% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* Down status: faster, and it does not fade fully, so it reads as insistent
+   rather than decorative. */
+@keyframes halo-urgent {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  60%,
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+/* Sparkline draw-in. stroke-dashoffset is not compositor-accelerated, but it
+   runs once on mount over a handful of short paths, not continuously. */
+@keyframes draw {
+  from {
+    stroke-dashoffset: var(--len);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Value change flash: a brief accent wash behind a number that just updated.
+   Cheap and very "dev tool". */
+@keyframes flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The poll countdown ring sweeps once per interval. */
+@keyframes sweep {
+  from {
+    stroke-dashoffset: var(--circ);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Respect the OS setting. Also a useful escape hatch if the Pi turns out to
+   be slower than expected: one media query disables everything. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
