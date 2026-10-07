@@ -207,11 +207,29 @@ def resolve_device(spec: str | int, kind: str) -> int:
 
     needle = str(spec).lower()
     want_input = kind == "input"
-    for idx, dev in enumerate(sd.query_devices()):
-        channels = dev["max_input_channels"] if want_input else dev["max_output_channels"]
-        if channels > 0 and needle in dev["name"].lower():
-            return idx
 
-    raise RuntimeError(
-        f"No {kind} device matching {spec!r}. Available devices:\n{sd.query_devices()}"
-    )
+    matches = [
+        (idx, dev["name"])
+        for idx, dev in enumerate(sd.query_devices())
+        if (dev["max_input_channels"] if want_input else dev["max_output_channels"]) > 0
+        and needle in dev["name"].lower()
+    ]
+
+    if not matches:
+        raise RuntimeError(
+            f"No {kind} device matching {spec!r}. Available devices:\n{sd.query_devices()}"
+        )
+
+    if len(matches) > 1:
+        # Taking the first match silently is how you end up recording from the
+        # wrong microphone and never understanding why. A bare "USB" needle
+        # matches every USB audio device on the bus, which is common: a USB mic
+        # and a USB speaker both advertise it.
+        listed = ", ".join(f"[{i}] {n}" for i, n in matches)
+        logging.getLogger("config").warning(
+            "%s device spec %r matched %d devices (%s). Using [%d]. "
+            "Narrow the substring to pick deliberately.",
+            kind, spec, len(matches), listed, matches[0][0],
+        )
+
+    return matches[0][0]

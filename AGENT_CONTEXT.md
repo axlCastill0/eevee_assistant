@@ -9,7 +9,10 @@ meta:
   root: /Users/tako/root/eevee_assistant
   last_updated: 2026-10-04
   git_branch_main: main
-  target_host: Raspberry Pi 5 (8GB recommended), Raspberry Pi OS Lite 64-bit (Bookworm)
+  target_host: Raspberry Pi 5 (8GB recommended), Raspberry Pi OS Lite 64-bit
+               CONFIRMED 2026-10-07: the Pi runs Trixie (Debian 13), aarch64.
+               The host release does NOT constrain the images - containers
+               bring their own userland. Only host-facing docs/packages care.
 ```
 
 ## layout
@@ -78,7 +81,7 @@ infra/
     docker-compose.yml       services: backend, voice (independent)
     .env.example
     backend/Dockerfile       python:3.13-slim
-    voice/Dockerfile         python:3.11-slim-bookworm (see gotcha below)
+    voice/Dockerfile         python:3.11-slim-bookworm (base != host; see below)
     ui/Dockerfile            node build -> nginx:1.27-alpine
     ui/nginx.conf.template   serves dist + proxies /api INJECTING X-API-Key
 docs/
@@ -380,6 +383,13 @@ config:
 audio_devices:
   prefer a NAME SUBSTRING over an index; indexes are reordered by reboots and
   replugs. config.resolve_device() accepts either.
+  candidates are filtered by DIRECTION first, then by substring; a spec
+  matching >1 device logs a warning and takes the first.
+  HOST ALSA GOTCHA (seen on the real Pi 2026-10-07): the host's `default` PCM
+  was an `asym` with no capture slave, so `arecord` failed while the hardware
+  was fine. This does NOT affect the containers - host asound.conf is not
+  mounted, only /dev/snd - and the pipeline never opens `default` anyway.
+  Documented in docs/README_PI.md.
 
 failure_posture:
   voice: degrade and keep listening. TTS failures, playback failures, API
@@ -502,6 +512,7 @@ macos_caveat: on Docker Desktop for Mac, host mode attaches the container to
 | 2026-10-04 | backend composes the speech string | it owns the data; keeps wording out of the voice image; stops a small model inventing statuses |
 | 2026-10-04 | intents fetched from the API at boot | kills the prompt/grammar/handler drift the prototype had |
 | 2026-10-04 | voice python 3.11 | no aarch64 wheels for 3.13 |
+| 2026-10-07 | keep the bookworm BASE IMAGE although the host is Trixie | a container brings its own userland, so host Debian/Python are irrelevant. Bookworm is the release these aarch64 wheels were built against; changing it adds risk for no gain |
 | 2026-10-04 | Qwen2.5-**1.5B Q5_K_M** | USER: accuracy over latency. Supersedes the initial 0.5B/Q4 choice |
 | 2026-10-04 | regex fast path before the SLM | the 1.5B costs 4-5s; keeps common commands ~2s |
 | 2026-10-04 | large models bind-mounted, small ones baked | 1.3GB image is unwieldy; no first-boot network dependency either |

@@ -16,7 +16,7 @@ boots and says so out loud.
 - USB microphone. Native sample rate does not matter — 48 kHz is downsampled
   to 16 kHz in software.
 - USB speaker or headset for TTS output.
-- Raspberry Pi OS Lite (64-bit, Bookworm).
+- Raspberry Pi OS Lite (64-bit, Trixie / Debian 13). Bookworm works too.
 
 ## 2. Host packages
 
@@ -257,6 +257,11 @@ Carried over from the prototype, all learned the hard way:
 
 1. **Python 3.11, not 3.13.** `llama-cpp-python`, `ctranslate2` and
    `onnxruntime` have no aarch64 wheels for 3.13. The voice image pins 3.11.
+
+   This is independent of the host. Raspberry Pi OS Trixie ships Python 3.13,
+   and that is fine — the container brings its own userland, so the host's
+   Debian release and interpreter never come into it. The pin only constrains
+   a bare-metal run, which would need its own 3.11 from pyenv or uv.
 
 2. **Silero VAD v5 needs 64 samples of context** from the previous chunk
    prepended to each 512-sample chunk. Without it scores never exceed ~0.03

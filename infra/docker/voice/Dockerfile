@@ -1,6 +1,12 @@
 # Python 3.11, not 3.13: several deps here (llama-cpp-python, ctranslate2,
 # onnxruntime) have no aarch64 wheels for 3.13 and would fall back to a long
-# source build or fail outright. Bookworm matches Raspberry Pi OS Lite.
+# source build or fail outright.
+#
+# The bookworm base is deliberate and does NOT need to track the host. The Pi
+# runs Raspberry Pi OS Trixie (Debian 13, Python 3.13), but a container brings
+# its own userland, so the host's Debian release and Python version are
+# irrelevant to what runs in here. Pinning bookworm keeps us on the Debian
+# release these wheels were built and tested against.
 FROM python:3.11-slim-bookworm
 
 # Audio group id. Must match the host's `audio` group or the container cannot
