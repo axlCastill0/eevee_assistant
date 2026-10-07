@@ -499,6 +499,116 @@ macos_caveat: on Docker Desktop for Mac, host mode attaches the container to
         mutually exclusive and Docker rejects the combination outright.
 ```
 
+## pi runtime constraints
+
+```yaml
+discovered: 2026-10-07, on the real hardware
+
+memory_cgroups_OFF_BY_DEFAULT:
+  symptom: compose prints "Your kernel does not support memory limit
+           capabilities or the cgroup is not mounted. Limitation discarded."
+  meaning: mem_limit on the voice and ui services is INERT until fixed. The
+           guard against a leak taking the API down does not exist.
+  fix: append `cgroup_enable=memory cgroup_memory=1` to the single line in
+       /boot/firmware/cmdline.txt, then reboot. Documented in README_PI §3b.
+  verify: `cat /sys/fs/cgroup/cgroup.controllers` lists `memory`
+
+power:
+  requirement: official 27W USB-C PD (5.1V/5A). NOT a 5V/3A phone charger.
+  why: four cores saturate while a 1.2GB model loads, with USB audio attached.
+       A Pi 5 browns out and CUTS POWER rather than erroring. With a 3A supply
+       the firmware also caps total USB current at 600mA.
+  diagnosis: `vcgencmd get_throttled`; bit 0 = undervoltage now,
+             bit 16 = undervoltage occurred since boot. 0x0 is clean.
+  NOTE FOR AGENTS: nothing in this stack can power the board off. There is no
+  shutdown call. An OOM kills a process; a panic reboots. A hard power-off is
+  hardware - do not go looking for it in the code.
+
+startup_load_spike:
+  all three containers starting at once is the worst moment. Bringing them up
+  one at a time (backend, ui, then voice) isolates which one trips it.
+  VOICE_SLM_THREADS / VOICE_WHISPER_THREADS can drop to 3 to leave a core;
+  the stages are sequential so the models never contend anyway.
+```
+
+## display session / kiosk
+
+```yaml
+researched: 2026-10-07, against Raspberry Pi forums + official docs + Debian pkgs
+
+TRIXIE SHIPS `chromium`, NOT `chromium-browser`.
+  A .xinitrc or autostart referencing chromium-browser fails with "not found",
+  the client exits, and X shuts down reporting "Server terminated
+  successfully" - which reads like success. kiosk.sh probes both names.
+
+RECOMMENDED PATH IS NOW labwc (Wayland), NOT i3/X11:
+  - Trixie's Pi OS defaults to Wayland; labwc is what Raspberry Pi documents
+    and tests for kiosks, and Chromium is shipped built for Wayland
+  - this panel runs ONE fullscreen browser, so i3's tiling buys nothing
+  - labwc removes the X server, xinit, .xinitrc and the i3 config from the
+    failure surface entirely
+  - labwc 0.8.3 is in Debian trixie for arm64 and pulls xwayland
+  - setup: apt install labwc; `exec labwc` from .bash_profile on tty1 only;
+    ~/.config/labwc/autostart contains "<abs path>/kiosk.sh &" (the & is
+    required or the session never finishes starting)
+  i3/X11 is kept in README_PI section 8.4 as Option B, fully fixed.
+
+THE DIAGNOSTIC THAT ACTUALLY WORKS:
+  startx > ~/startx.log 2>&1   (or: labwc > ~/labwc.log 2>&1)
+  Xorg.0.log records only X server activity and says NOTHING about a client
+  that failed to launch. Client errors only appear on stdout/stderr.
+
+i3 config parser traps (both fail SILENTLY):
+  - LINE BASED: no backslash continuation. A multi-line exec is parsed as
+    several broken commands.
+  - NO ~ OR $HOME EXPANSION in exec paths. Must be absolute. The guide writes
+    it with an unquoted heredoc so $HOME expands, with \$mod escaped so i3's
+    own variables survive. Verified.
+
+black screen is ambiguous:
+  i3 with no window and no bar looks identical to i3 never starting.
+  Super+Return -> xterm appears => i3 is alive, the browser exec is at fault.
+  i3 -C -c <config> validates without starting a session.
+
+xterm is required on Lite: there is no terminal emulator, so the
+  $mod+Return escape hatch does nothing without it - and that is also the
+  fastest way to tell whether i3 is running.
+
+package check (verified on packages.debian.org/trixie):
+  xserver-xorg HARD-depends on xserver-xorg-core, -input-all and -video-all,
+  so the short package list is sufficient. Driver packages were NOT the cause.
+```
+
+## i3 kiosk gotchas
+
+```yaml
+discovered: 2026-10-07, on the real hardware
+
+i3_config_is_LINE_BASED:
+  i3 has NO backslash line continuation. A command split across lines is
+  parsed as several broken commands and silently does nothing. This cost a
+  debugging round trip: the Chromium exec was written multi-line and the
+  browser never launched.
+  fix: the browser lives in ~/kiosk.sh; i3 execs it on ONE line.
+
+i3_does_not_expand_tilde_or_HOME:
+  `exec ~/kiosk.sh` is passed through literally and never runs. The exec line
+  needs an absolute path, written in by sed at setup time.
+
+black_screen_is_ambiguous:
+  i3 with no window and no bar looks exactly like i3 not starting. Always
+  establish which before changing anything:
+    Super+Return -> xterm appears => i3 is alive, the browser exec is at fault
+    i3 -C -c ~/.config/i3/config  => validates without starting a session
+  A temporary `bar { status_command i3status }` makes a live i3 visible.
+
+xterm_is_required:
+  Pi OS Lite ships no terminal emulator, so `bindsym $mod+Return exec xterm`
+  (or i3-sensible-terminal) does nothing unless xterm is installed. That also
+  removes the quickest way to tell whether i3 is running. It is in the package
+  list in README_PI section 2.
+```
+
 ## decisions
 
 | date | decision | why |

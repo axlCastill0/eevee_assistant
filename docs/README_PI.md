@@ -11,7 +11,8 @@ Bookworm (Debian 12) also works; the differences are called out where they
 matter.
 
 > Deeper references: [VOICE_SETUP.md](VOICE_SETUP.md) for the audio pipeline,
-> [UI.md](UI.md) for the dashboard.
+> [UI.md](UI.md) for the dashboard, [PSU.md](PSU.md) for power supply
+> requirements and undervoltage.
 
 ---
 
@@ -29,6 +30,19 @@ Chromium opens `http://127.0.0.1:8080` fullscreen under i3.
 
 **Hardware:** Pi 5 (8 GB recommended — the classifier model is ~1.2 GB
 resident), a USB microphone, a USB speaker or headset, and the touchscreen.
+
+**Power supply: use the official 27 W USB-C PD supply (5.1 V / 5 A).** This is
+not optional padding. A Pi 5 under the load this project creates — four cores
+pegged while a 1.2 GB model loads, plus two USB audio devices and a display —
+draws well beyond what a typical 5 V / 3 A phone charger delivers. The failure
+mode is not a graceful error: the board browns out and cuts power, usually at
+the exact moment everything starts at once. With a 3 A supply the firmware also
+caps total USB current at 600 mA, which two USB audio devices can exceed on
+their own.
+
+If the Pi powers off during `docker compose up`, or USB devices such as touch
+input stop responding, suspect the supply before anything else. Details in
+[PSU.md](PSU.md).
 
 ---
 
@@ -79,6 +93,7 @@ sudo apt install -y \
   git curl ca-certificates \
   xserver-xorg xinit x11-xserver-utils \
   i3 \
+  xterm \
   unclutter \
   alsa-utils
 ```
@@ -90,6 +105,7 @@ What each is for:
 | `git curl ca-certificates` | clone the repo, fetch models and the Docker installer |
 | `xserver-xorg xinit x11-xserver-utils` | Lite ships no X server; `xset` (for disabling screen blanking) is in x11-xserver-utils |
 | `i3` | the window manager |
+| `xterm` | a terminal under X. Pi OS Lite has none, and without one the `$mod+Return` escape hatch does nothing — which also removes your only quick way to tell whether i3 is actually running |
 | `unclutter` | hides the mouse cursor |
 | `alsa-utils` | `arecord` / `aplay`, for testing audio before involving Docker |
 
@@ -166,6 +182,48 @@ docker compose version      # must be v2.x — note the space, not docker-compos
 `docker compose` (space) is the v2 plugin and is what this repo's commands use.
 
 ---
+
+## 3b. Enable memory cgroups
+
+Raspberry Pi OS ships with the kernel's **memory cgroup controller disabled**.
+Without it Docker cannot enforce `mem_limit`, and the compose file's memory caps
+are silently discarded with:
+
+```
+Your kernel does not support memory limit capabilities or the cgroup is not
+mounted. Limitation discarded.
+```
+
+Those caps exist so a leak in the voice pipeline cannot drag the whole Pi — and
+the API with it — down. Turn the controller on:
+
+```bash
+sudo nano /boot/firmware/cmdline.txt
+```
+
+That file is **one single line**. Append the following to the end of that line,
+separated by a space — do not add a newline:
+
+```
+cgroup_enable=memory cgroup_memory=1
+```
+
+Then reboot and confirm:
+
+```bash
+sudo reboot
+# after it comes back:
+docker info 2>/dev/null | grep -i "limit support"
+```
+
+Expect no `WARNING: No memory limit support`. You can also check directly:
+
+```bash
+cat /sys/fs/cgroup/cgroup.controllers     # should list: memory
+```
+
+Enabling this costs a small amount of kernel memory accounting overhead, which
+is the price of the limits working at all.
 
 ## 4. Audio
 
@@ -401,97 +459,197 @@ Then say **"hey jarvis"**, followed by **"is everything ok"**.
 
 ---
 
-## 8. i3 and the kiosk
+## 8. Display session and kiosk
 
-Raspberry Pi OS Lite boots to a text console. The plan: log in automatically,
-start X automatically, and have i3 launch Chromium fullscreen.
+Raspberry Pi OS Lite boots to a text console. Something has to start a display
+session and put Chromium on screen fullscreen.
+
+**On Trixie there are two paths, and they are not equal:**
+
+| | Option A: labwc (Wayland) | Option B: i3 (X11) |
+|---|---|---|
+| Status on Trixie | the OS default, officially documented for kiosks | non-default, needs the whole X stack |
+| Moving parts | compositor + autostart file | X server, xinit, `.xinitrc`, i3, i3 config |
+| Chromium | built and shipped for Wayland on Pi OS | runs via XWayland/X11, less tested here |
+| Good for | one fullscreen app | tiling several windows |
+
+**Option A is recommended.** This panel runs exactly one fullscreen browser, so
+i3's tiling buys nothing, and labwc is the configuration Raspberry Pi actually
+ships and tests. Option B is kept below for anyone who wants i3 anyway.
 
 ### 8.1 Console autologin
+
+Needed for both options.
 
 ```bash
 sudo raspi-config
 ```
 
-`System Options` -> `Boot / Auto Login` -> **Console Autologin**. Finish, but
+`System Options` → `Boot / Auto Login` → **Console Autologin**. Finish, and
 decline the reboot for now.
 
-### 8.2 Start X on login
+### 8.2 The kiosk launcher
 
-Append to `~/.bash_profile` (create it if absent):
+Used by both options. Keeping the browser in a script rather than inline means
+you can run it by hand and read the error instead of staring at a black screen.
+
+```bash
+cat > ~/kiosk.sh <<'EOF'
+#!/usr/bin/env bash
+# Launch the dashboard fullscreen. Run directly to debug.
+set -euo pipefail
+
+URL="${KIOSK_URL:-http://127.0.0.1:8080}"
+
+# Trixie ships `chromium`. Older Raspberry Pi OS shipped `chromium-browser`.
+# Checking both means this script works on either.
+BROWSER="$(command -v chromium || command -v chromium-browser || true)"
+if [ -z "$BROWSER" ]; then
+  echo "No chromium binary found. Run: sudo apt install -y chromium" >&2
+  exit 1
+fi
+
+exec "$BROWSER" \
+  --kiosk "$URL" \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --disable-features=TranslateUI \
+  --no-first-run \
+  --check-for-update-interval=31536000 \
+  --password-store=basic \
+  --use-mock-keychain \
+  --autoplay-policy=no-user-gesture-required
+EOF
+chmod +x ~/kiosk.sh
+```
+
+`--password-store=basic` and `--use-mock-keychain` stop Chromium looking for a
+keyring that does not exist on Lite — a common cause of it failing to start
+with no obvious message.
+
+---
+
+### 8.3 Option A — labwc (recommended)
+
+labwc is a Wayland compositor. No X server, no `.xinitrc`, no `startx`.
+
+```bash
+sudo apt install -y labwc chromium
+```
+
+Start it automatically on the first console, and only there, so SSH logins are
+unaffected:
 
 ```bash
 cat >> ~/.bash_profile <<'EOF'
-# Start X automatically on the first virtual console only, so SSH sessions
-# and other TTYs are unaffected.
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+# Start the Wayland session on tty1 only.
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  exec labwc
+fi
+EOF
+```
+
+Then tell labwc what to launch. The `&` matters — without it labwc waits for
+the browser and the session never finishes starting:
+
+```bash
+mkdir -p ~/.config/labwc
+cat > ~/.config/labwc/autostart <<EOF
+$HOME/kiosk.sh &
+EOF
+```
+
+Note this heredoc is unquoted (`<<EOF`, not `<<'EOF'`), so `$HOME` expands to a
+real path when the file is written.
+
+Test without rebooting — from the console on tty1, not over SSH:
+
+```bash
+labwc
+```
+
+Chromium should come up fullscreen. `Ctrl+Alt+F2` gets you to another console
+if you need to escape.
+
+Screen blanking is not an issue here: nothing idles the display unless you
+install something like `swayidle`. The cursor is already hidden by the
+dashboard's own CSS.
+
+---
+
+### 8.4 Option B — i3 on X11
+
+Only if you specifically want i3.
+
+```bash
+sudo apt install -y xserver-xorg xinit x11-xserver-utils i3 xterm unclutter chromium
+```
+
+`xterm` is not optional: without a terminal, the `$mod+Return` escape hatch
+does nothing, and you lose the quickest way to tell whether i3 is running at
+all.
+
+```bash
+echo "exec i3" > ~/.xinitrc
+chmod +x ~/.xinitrc
+```
+
+```bash
+cat >> ~/.bash_profile <<'EOF'
+# Start X on tty1 only, so SSH sessions are unaffected.
+if [ -z "${DISPLAY:-}" ] && [ "$(tty)" = "/dev/tty1" ]; then
   exec startx
 fi
 EOF
 ```
 
-The `tty1` guard matters — without it, every SSH login would try to start X.
-
-### 8.3 Tell X to run i3
-
-```bash
-echo "exec i3" > ~/.xinitrc
-```
-
-### 8.4 i3 config
+The i3 config. **Two rules that are easy to get wrong and fail silently:**
+i3 parses this file line by line with **no backslash continuation**, and it
+**does not expand `~` or `$HOME`** in an `exec` path.
 
 ```bash
 mkdir -p ~/.config/i3
-```
-
-Create `~/.config/i3/config`:
-
-```bash
-cat > ~/.config/i3/config <<'EOF'
+cat > ~/.config/i3/config <<EOF
 # Minimal i3 for a single-application kiosk.
+#
+# i3 parses line by line: a command may NOT be split with a trailing
+# backslash, which is why the browser lives in kiosk.sh.
+# i3 also does not expand ~ or \$HOME, so exec paths are absolute.
 
-set $mod Mod4
+set \$mod Mod4
 font pango:monospace 8
 
-# No window decorations or gaps — the dashboard owns the whole screen.
 default_border none
 default_floating_border none
 hide_edge_borders both
 
-# Keep the screen awake and hide the cursor.
 exec --no-startup-id xset s off
 exec --no-startup-id xset -dpms
 exec --no-startup-id xset s noblank
 exec --no-startup-id unclutter -idle 0
 
-# The dashboard. Change `chromium-browser` to `chromium` if that is the binary
-# your Pi installed (see section 2).
-exec --no-startup-id chromium-browser \
-  --kiosk http://127.0.0.1:8080 \
-  --noerrdialogs \
-  --disable-infobars \
-  --disable-session-crashed-bubble \
-  --disable-features=TranslateUI \
-  --check-for-update-interval=31536000 \
-  --password-store=basic \
-  --autoplay-policy=no-user-gesture-required
+exec --no-startup-id $HOME/kiosk.sh
 
-# Escape hatches. Without these a kiosk with no keyboard shortcuts is hard to
-# recover from if something goes wrong.
-bindsym $mod+Return exec i3-sensible-terminal
-bindsym $mod+Shift+q kill
-bindsym $mod+Shift+e exec i3-msg exit
-bindsym $mod+Shift+r restart
+# Escape hatches. A kiosk with no way out means pulling the SD card.
+bindsym \$mod+Return exec xterm
+bindsym \$mod+Shift+q kill
+bindsym \$mod+Shift+e exec i3-msg exit
+bindsym \$mod+Shift+r restart
 EOF
 ```
 
-The Chromium flags, briefly: `--kiosk` is fullscreen with no chrome;
-`--noerrdialogs` and `--disable-session-crashed-bubble` stop a dialog appearing
-over the dashboard after an unclean shutdown (which a wall panel will have,
-regularly); `--check-for-update-interval` keeps update nags away;
-`--password-store=basic` avoids a keyring prompt on a machine with no keyring.
+That heredoc is unquoted so `$HOME` expands, with `\$mod` escaped so i3's own
+variables survive. Check the result:
 
-Keep `$mod+Return` and `$mod+Shift+e` even though you will rarely use them —
-recovering a kiosk with no way out otherwise means pulling the SD card.
+```bash
+grep exec ~/.config/i3/config      # the kiosk path must be absolute
+i3 -C -c ~/.config/i3/config && echo "config OK"
+```
+
+`i3 -C` parses the config without starting a session. A config error makes i3
+start, show an error bar, and launch nothing — which looks exactly like i3 not
+starting.
 
 ### 8.5 Reboot
 
@@ -501,7 +659,73 @@ sudo reboot
 
 It should come up straight into the dashboard.
 
----
+### 8.6 When the screen stays black
+
+**Capture the real error.** This is the single most useful command, because
+`Xorg.0.log` records only X server activity and says nothing about a client
+that failed to launch:
+
+```bash
+startx > ~/startx.log 2>&1
+cat ~/startx.log
+```
+
+For labwc:
+
+```bash
+labwc > ~/labwc.log 2>&1
+cat ~/labwc.log
+```
+
+`Server terminated successfully` at the end means X started, the client exited
+immediately, and X shut down cleanly after it. That is a client problem, not a
+display problem — look further up the log for the real error, typically a
+"not found".
+
+**Is the browser the problem?** Run it on its own:
+
+```bash
+~/kiosk.sh
+```
+
+The most common failure on Trixie is the binary name: **`chromium-browser`
+does not exist on Trixie, only `chromium`.** Check with:
+
+```bash
+command -v chromium chromium-browser
+```
+
+**Is i3 running but empty?** An i3 session with no window and no status bar is
+a completely black screen, indistinguishable from i3 never starting. Press
+`Super+Return`: an xterm means i3 is alive and only the browser exec is broken.
+From another console (`Ctrl+Alt+F2`) or SSH:
+
+```bash
+pgrep -a i3
+pgrep -a X
+```
+
+To make a live-but-empty i3 visible while debugging:
+
+```bash
+sudo apt install -y i3status
+printf '\nbar {\n    status_command i3status\n}\n' >> ~/.config/i3/config
+```
+
+Reload with `Super+Shift+r`. Remove it once the panel works.
+
+**Is the dashboard even up?** Chromium on an unreachable URL shows an error
+page, not a black screen — so a truly black screen points at the session or the
+exec, not the server. Still worth confirming:
+
+```bash
+curl -sI http://127.0.0.1:8080 | head -1
+```
+
+**Still stuck on X11?** Switch to Option A. On Trixie, X11 is the non-default
+path and Chromium is shipped for Wayland; labwc removes the X server,
+`.xinitrc` and i3 config from the picture entirely, which is three fewer things
+that can fail silently.
 
 ## 9. Start on boot
 
@@ -550,6 +774,164 @@ changing it needs `--build`.
 ---
 
 ## 11. Troubleshooting
+
+### Black screen after startx, no i3
+
+An i3 session with no windows and no status bar is a **completely black
+screen** — visually identical to i3 failing to start. Establish which it is
+before changing anything.
+
+**Is i3 running?** Press `Super+Return`. If an xterm appears, i3 is fine and
+the problem is only that the browser did not launch — skip to the next part.
+If nothing happens, check that `xterm` is installed; without it that binding
+does nothing even when i3 is healthy. From an SSH session or `Ctrl+Alt+F2`:
+
+```bash
+pgrep -a i3
+pgrep -a X
+```
+
+**If i3 is not running**, read the actual error rather than guessing. Stop the
+autologin session first (`Ctrl+Alt+F2`, log in there), then:
+
+```bash
+cat ~/.xsession-errors 2>/dev/null | tail -40
+startx 2>&1 | tail -40        # run it in the foreground and watch
+```
+
+Then work through:
+
+```bash
+command -v i3                             # installed at all?
+i3 -C -c ~/.config/i3/config              # config parse errors
+cat ~/.xinitrc                            # should be exactly: exec i3
+chmod +x ~/.xinitrc                       # some xinit builds require this
+```
+
+A config parse error is the most common cause. i3 starts, puts up an error
+bar, and launches nothing.
+
+**If i3 is running but the dashboard is not**, the browser exec is the problem.
+Run the launcher by hand from an xterm (`Super+Return`) and read the error:
+
+```bash
+~/kiosk.sh
+```
+
+Likely causes, in order:
+
+1. **A multi-line `exec` in the i3 config.** i3 parses line by line and has no
+   backslash continuation; a command split across lines is silently broken.
+   Keep the browser in `~/kiosk.sh` and exec that in one line.
+2. **`~` or `$HOME` in the exec path.** i3 does not expand either. Use the
+   full literal path, e.g. `/home/tako/kiosk.sh`.
+3. **Wrong binary name.** `chromium` on Trixie, `chromium-browser` on older Pi
+   OS. `~/kiosk.sh` handles both; check with
+   `command -v chromium chromium-browser`.
+4. **The dashboard is not up.** `curl -sI http://127.0.0.1:8080` should return
+   a 200. Chromium in `--kiosk` on an unreachable URL shows an error page, not
+   a black screen, so a truly black screen points at the exec rather than the
+   server.
+
+**Temporarily add a status bar** to make an otherwise-blank i3 obviously alive:
+
+```bash
+printf '\nbar {\n    status_command i3status\n}\n' >> ~/.config/i3/config
+```
+
+Reload with `Super+Shift+r`. A bar appearing proves i3 is running and shifts
+the investigation to the browser. Remove it once the panel works —
+`sudo apt install -y i3status` if the bar stays empty.
+
+### The Pi powers off during startup or under load
+
+Nothing in this stack can power a Pi off — there is no shutdown call anywhere.
+An out-of-memory condition kills a process, a kernel panic reboots. A hard
+power-off is a hardware event, and on a Pi 5 it is nearly always the supply
+browning out under a current spike.
+
+Starting all three containers at once is the worst moment: four cores saturate
+while a 1.2 GB model is read off the SD card, with USB audio attached.
+
+**First, after it comes back up, check whether the firmware saw undervoltage:**
+
+```bash
+vcgencmd get_throttled
+```
+
+`throttled=0x0` means no power problem was recorded. Otherwise the bits are:
+
+| Bit | Meaning |
+|---|---|
+| 0 (`0x1`) | undervoltage **right now** |
+| 1 (`0x2`) | ARM frequency capped now |
+| 2 (`0x4`) | currently throttled |
+| 16 (`0x10000`) | undervoltage **has occurred** since boot |
+| 18 (`0x40000`) | throttling has occurred since boot |
+
+Anything with bit 0 or bit 16 set means the supply is inadequate. So
+`0x50005` is a board that is browning out.
+
+**Then check what the kernel saw, and whether the previous boot ended cleanly:**
+
+```bash
+dmesg | grep -iE "under.?voltage|hwmon"
+journalctl --list-boots | tail -3
+journalctl -b -1 -e --no-pager | tail -40      # tail of the boot that died
+vcgencmd measure_temp                           # throttles ~85C
+free -h
+```
+
+A previous boot whose log simply stops mid-sentence, with no shutdown messages
+and no oops, is the signature of the power being cut. If instead you find
+`Out of memory: Killed process`, it is a memory problem, not power — see below.
+
+**Fixes, in order of likelihood:**
+
+1. **Use the official 27 W (5.1 V / 5 A) USB-C PD supply.** A 5 V / 3 A phone
+   charger is the single most common cause. Powered USB hubs for the audio
+   devices help too, by moving their draw off the Pi's budget.
+2. **Stop everything starting simultaneously.** Bring the services up one at a
+   time to confirm which one triggers it:
+   ```bash
+   docker compose up -d backend
+   docker compose up -d ui
+   docker compose up -d voice      # the heavy one
+   ```
+3. **Leave a core idle** so the load is less spiky. In `infra/docker/.env`:
+   ```
+   VOICE_SLM_THREADS=3
+   VOICE_WHISPER_THREADS=3
+   ```
+   This costs some latency and buys headroom. The stages run sequentially, so
+   neither model is competing with the other anyway.
+4. **Rule out the display and peripherals** by booting headless over SSH with
+   the touchscreen unplugged and starting the stack. If it survives that, the
+   problem is total draw rather than any one service.
+
+### If it was memory, not power
+
+If the logs show an OOM kill rather than a clean cut, check which:
+
+```bash
+journalctl -b -1 | grep -i "out of memory"
+free -h
+```
+
+On a 4 GB Pi the 1.5 B model is tight next to Chromium. Either switch to the
+smaller classifier in `infra/docker/.env`:
+
+```
+VOICE_SLM_MODEL=models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+```
+
+(fetch it first — it is about 470 MB and roughly 3x faster, at some accuracy
+cost), or drop the model entirely with `VOICE_SLM_ENABLED=false` and rely on
+the regex fast path.
+
+Make sure memory cgroups are actually enabled (§3b) so the compose `mem_limit`
+caps are enforced — without them a runaway container has nothing stopping it
+from taking the whole board down.
 
 ### Nothing on the screen after boot
 
