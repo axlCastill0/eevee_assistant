@@ -456,7 +456,9 @@ voice:
   volumes: ["../../models:/app/models:ro"]
   mem_limit: 2560m          # guard: a leak must not take the API down with it
   build_args: [AUDIO_GID]
-  user: non-root `voice`, supplementary group AUDIO_GID
+  user: non-root `eevee`, supplementary group AUDIO_GID
+    NOT named `voice`: Debian base-passwd has a system group of that name
+    (GID 22) and useradd's default user-group creation collides with it.
   apt_runtime: libportaudio2 libsndfile1 espeak-ng alsa-utils
     note: portaudio19-dev is NOT needed - sounddevice binds via CFFI at runtime
     note: espeak-ng is Piper's phonemiser backend

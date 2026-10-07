@@ -63,11 +63,21 @@ WhisperModel('tiny.en', device='cpu', compute_type='int8')" \
 
 COPY apps/voice/ ./
 
-# Non-root, but in the audio group so /dev/snd is reachable.
+# Non-root, but in the host's audio group so /dev/snd is reachable.
+#
+# The account is called `eevee`, NOT `voice`: Debian's base-passwd ships a
+# system group named `voice` (GID 22), and because useradd creates a matching
+# user group by default, `useradd voice` collides with it and aborts the build
+# ("group voice exists", exit 9).
+#
+# groupadd is allowed to fail: AUDIO_GID usually already belongs to a group in
+# the base image -- on Debian, GID 29 is `audio` -- and joining that existing
+# group is exactly the intent. usermod accepts a numeric GID, so this works
+# whether the group was pre-existing or just created.
 RUN groupadd -g "${AUDIO_GID}" hostaudio 2>/dev/null || true \
- && useradd --create-home --shell /usr/sbin/nologin voice \
- && usermod -aG "${AUDIO_GID}" voice \
- && chown -R voice:voice /app
-USER voice
+ && useradd --create-home --shell /usr/sbin/nologin eevee \
+ && usermod -aG "${AUDIO_GID}" eevee \
+ && chown -R eevee:eevee /app
+USER eevee
 
 CMD ["python", "run.py"]

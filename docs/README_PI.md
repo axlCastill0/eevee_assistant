@@ -277,9 +277,14 @@ The voice container runs as a non-root user that must belong to the host's
 getent group audio
 ```
 
-Output looks like `audio:x:29:pi`. **Note the number** (usually 29) — it goes
-into `AUDIO_GID` in the next step. It is a *build argument*, so changing it
-later requires rebuilding the voice image.
+Output looks like `audio:x:29:pi`. **Note the number** — it goes into
+`AUDIO_GID` in the next step. It is a *build argument*, so changing it later
+requires rebuilding the voice image.
+
+29 is the value Debian reserves for `audio` in `base-passwd`, so it is almost
+always correct on Raspberry Pi OS. Check anyway: if the host ever differs, the
+container cannot open the microphone and the failure looks like a permission
+error rather than a configuration one.
 
 ---
 
