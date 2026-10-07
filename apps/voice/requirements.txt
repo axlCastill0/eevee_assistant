@@ -1,6 +1,12 @@
 # Pinned to minor versions: this runs unattended on a Pi and a silent
 # dependency bump is harder to debug than an explicit one.
 #
+# Every pin below was checked to resolve for cp311 / aarch64 before being
+# committed. If you add one, verify it the same way rather than guessing --
+# a wrong pin costs a full rebuild to discover:
+#   pip download --no-deps --only-binary :all: \
+#     --python-version 311 --platform manylinux_2_28_aarch64 "<spec>" -d /tmp
+#
 # llama-cpp-python needs the CPU wheel index to avoid a 10-minute source build
 # on aarch64. It is passed on the pip command line in the Dockerfile, not here,
 # because Docker's layer cache handles it better as an explicit flag.
@@ -20,7 +26,10 @@ faster-whisper~=1.0
 llama-cpp-python~=0.3
 
 # Text-to-speech
-piper-onnx~=0.1
+# 1.0.x, not 0.1: the project never published an 0.x line to PyPI, so ~=0.1
+# resolves to nothing. The API this code uses is unchanged -- Piper(model_path,
+# config_path) and create(text) -> (float32 array, sample_rate).
+piper-onnx~=1.0
 
 # Backend API calls
 httpx~=0.27

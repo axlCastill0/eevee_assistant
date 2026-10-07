@@ -291,6 +291,23 @@ Carried over from the prototype, all learned the hard way:
 9. **`docker compose exec voice` device indexes differ from the host's.** Match
    by name instead.
 
+10. **Verify a dependency pin before committing it.** `piper-onnx` was pinned
+    `~=0.1` on the assumption it followed a 0.x line; it never published one,
+    so the pin resolved to nothing and the failure only surfaced minutes into
+    a Pi build. Check against the real index and the real target platform:
+
+    ```bash
+    pip download --only-binary :all: --python-version 311 \
+      --platform manylinux2014_aarch64 --platform manylinux_2_28_aarch64 \
+      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
+      -r apps/voice/requirements.txt -d /tmp/resolve-check
+    ```
+
+    Passing several `--platform` flags matters: wheels carry different
+    manylinux tags (numpy 1.26 is `manylinux2014`, onnxruntime is
+    `manylinux_2_28`), and a single tag wrongly rejects half of them. The full
+    set currently resolves to 63 wheels with no source builds.
+
 ---
 
 ## 12. Troubleshooting
