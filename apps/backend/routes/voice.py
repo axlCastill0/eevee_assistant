@@ -33,20 +33,10 @@ class IntentRequest(BaseModel):
 
 
 class IntentResponse(BaseModel):
-    speech: str          # canonical sentence; ALWAYS safe to say verbatim
+    speech: str          # say this verbatim
     intent: str          # echoed back, after normalisation
     item: Optional[str]
     ok: bool
-
-    # Re-wording contract. The voice container may ask the SLM for a better
-    # sounding sentence, but only this service knows what is actually true, so
-    # it ships the facts and the rules any rewrite has to satisfy. See
-    # intents.Answer and apps/voice/voice_assistant/phrasing.py.
-    facts: dict = Field(default_factory=dict)
-    must_include: list[str] = Field(default_factory=list)
-    forbid: list[str] = Field(default_factory=list)
-    require_any: list[str] = Field(default_factory=list)
-    phrasable: bool = True
 
 
 @router.get("/health")
@@ -87,20 +77,9 @@ def voice_intent(req: IntentRequest):
     # Enforce the item contract server-side; the pipeline's grammar is advisory.
     item = req.item if INTENTS[intent].needs_item else None
 
-    answer = handle(intent, item)
-    log.info("intent=%s item=%r transcript=%r -> %r",
-             intent, item, req.transcript, answer.speech)
-    return IntentResponse(
-        speech=answer.speech,
-        intent=intent,
-        item=item,
-        ok=answer.ok,
-        facts=answer.facts,
-        must_include=answer.must_include,
-        forbid=answer.forbid,
-        require_any=answer.require_any,
-        phrasable=answer.phrasable,
-    )
+    speech, ok = handle(intent, item)
+    log.info("intent=%s item=%r transcript=%r -> %r", intent, item, req.transcript, speech)
+    return IntentResponse(speech=speech, intent=intent, item=item, ok=ok)
 
 
 # ---------------------------------------------------------------------------

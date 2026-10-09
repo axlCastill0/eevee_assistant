@@ -23,6 +23,15 @@ export type VoiceState =
   | 'offline'
   | 'unknown'
 
+/** An instruction from the assistant, as opposed to a state report. Commands
+ *  are never retained, so one is only ever delivered to the dashboards that
+ *  were connected when it was issued. */
+export interface VoiceCommand {
+  command: 'set_theme' | 'sleep_screen' | 'wake_screen' | string
+  value: string | null
+  at: number
+}
+
 export interface VoiceEvent {
   seq: number
   state: VoiceState
@@ -63,6 +72,9 @@ export interface VoiceFeed {
    *  or every reload would pop up whatever was last spoken, possibly hours
    *  ago. Found doing exactly that on 2026-10-08. */
   retained: boolean
+  /** The most recent command, or null. Changes identity on every command so
+   *  a repeated instruction ("dark mode" twice) is still seen as new. */
+  command: VoiceCommand | null
   /** Set when the backend closed the socket for a bad key, which is a
    *  configuration problem rather than an outage and should not be retried
    *  silently forever. */
@@ -77,6 +89,7 @@ export function useVoiceEvents(): VoiceFeed {
     seq: 0,
     connected: false,
     retained: false,
+    command: null,
     rejected: false,
   })
 
@@ -142,8 +155,27 @@ export function useVoiceEvents(): VoiceFeed {
         }
         if (typeof msg !== 'object' || msg === null) return
 
-        const data = msg as Partial<VoiceEvent> & { type?: string }
+        const data = msg as Partial<VoiceEvent> & {
+          type?: string
+          command?: string
+          value?: string | null
+        }
         if (data.type === 'ping') return // keepalive, carries no state
+
+        if (data.type === 'command' && data.command) {
+          // Commands do not touch the pill: they are instructions for the
+          // page, not a report of what the pipeline is doing. A fresh object
+          // every time, so two identical commands in a row both land.
+          setFeed((f) => ({
+            ...f,
+            command: {
+              command: data.command as string,
+              value: data.value ?? null,
+              at: data.at ?? Date.now() / 1000,
+            },
+          }))
+          return
+        }
 
         const retained = firstMessageRef.current
         firstMessageRef.current = false

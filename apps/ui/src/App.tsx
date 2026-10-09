@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { DetailSheet } from './components/DetailSheet'
 import { Overview } from './components/Overview'
 import { ServiceTile } from './components/ServiceTile'
+import { ScreenVeil } from './components/ScreenVeil'
 import { TopBar } from './components/TopBar'
 import { VoiceDialog } from './components/VoiceDialog'
 import { agoLabel } from './lib/format'
@@ -18,6 +19,34 @@ export default function App() {
   const voice = useVoiceEvents()
 
   const [openName, setOpenName] = useState<string | null>(null)
+  const [screenOff, setScreenOff] = useState(false)
+
+  // Commands from the assistant: theme changes and screen blanking. Keyed on
+  // the command object's identity, which is fresh for every command, so
+  // saying "dark mode" twice applies twice rather than being swallowed as an
+  // unchanged prop.
+  const command = voice.command
+  useEffect(() => {
+    if (!command) return
+
+    switch (command.command) {
+      case 'set_theme':
+        if (command.value === 'light' || command.value === 'dark' || command.value === 'auto') {
+          choose(command.value)
+        }
+        break
+      case 'sleep_screen':
+        setScreenOff(true)
+        break
+      case 'wake_screen':
+        setScreenOff(false)
+        break
+      default:
+        // An unrecognised command is a backend newer than this bundle. Ignore
+        // it rather than guessing.
+        break
+    }
+  }, [command, choose])
 
   // The event stream only reports what the pipeline SAYS it is doing, so a
   // pipeline that died mid-utterance would leave the pill stuck on green
@@ -109,6 +138,8 @@ export default function App() {
         speaking={voice.state === 'speaking'}
         retained={voice.retained}
       />
+
+      <ScreenVeil on={screenOff} onDismiss={() => setScreenOff(false)} />
 
       {open && (
         <DetailSheet

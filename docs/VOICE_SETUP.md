@@ -116,6 +116,46 @@ Expected: *"Everything good."* If the voice container has not been running for
 
 ---
 
+## 8b. What you can ask
+
+| intent | say | answered from |
+|---|---|---|
+| `system_health` | "is everything ok" | heartbeat registry |
+| `get_time` | "what time is it" | system clock |
+| `get_date` | "what's the date", "what day is it" | system clock |
+| `greeting` | "hello", "good morning" | time of day + health |
+| `repeat_last` | "say that again", "what was that" | last spoken line |
+| `set_theme` | "dark mode", "switch to auto" | pushes to the dashboard |
+| `sleep_screen` | "turn the screen off", "good night" | pushes to the dashboard |
+| `wake_screen` | "wake up", "screen on" | pushes to the dashboard |
+| `get_weather` | "what's the weather", "do I need a jacket" | Open-Meteo |
+| `list_capabilities` | "what can you do", "help" | the registry itself |
+| `get_uptime` | "how long have you been running" | `/proc/uptime` |
+| `cpu_temp` | "how hot is it" | `/sys/class/thermal` |
+| `unknown` | anything else | — |
+
+Every one has at least three phrasings and never repeats itself back-to-back.
+`set_theme` is the only intent that takes an item (`dark`, `light`, `auto`).
+
+**Weather needs a location.** Open-Meteo needs no account and no key, but it
+does need coordinates — set `WEATHER_LAT`, `WEATHER_LON` and optionally
+`WEATHER_PLACE` (spoken aloud) in the backend's environment. Without them the
+assistant says it has no location rather than guessing. Readings are cached for
+10 minutes, and a failed refresh falls back to the last good one rather than
+going mute when the wifi hiccups.
+
+**Uptime and temperature need no mounts.** `/proc/uptime` is the host's inside a
+container, and `/sys/class/thermal` is passed through read-only by default.
+`cpu_temp` checks the zone's `type` before trusting it, so it reports the SoC
+rather than whichever sensor happens to be `thermal_zone0`.
+
+**"Screen off" dims the panel, it does not power the display down.** A browser
+cannot do DPMS and the backend has no access to the host's compositor, so the
+dashboard paints itself black and stays tappable. Real power-off would need a
+helper on the host (`wlopm --off \*` under labwc).
+
+---
+
 ## 9. Architecture
 
 ```
@@ -229,32 +269,25 @@ the host's loopback via `network_mode: host`, so the call is cheap.
 
 ### How the answer is worded
 
-The backend decides what is true and composes a canonical sentence. The SLM
-then gets one more call: here are the facts, here is the plain sentence, say it
-in your own voice. The result is **validated before it is spoken** — it must
-keep the load-bearing words (a down service's name, the digits of the time),
-must not name a service that is healthy, and must actually sound like bad news
-when the news is bad. Anything that fails is thrown away and the plain sentence
-is spoken instead, with the reason logged at INFO as `Rewrite rejected`.
+Every spoken word is written in Python, in `apps/backend/intents.py`. The model
+classifies and nothing else.
 
-So the model chooses the words; it never chooses the facts. That is the whole
-reason this is safe — see `phrasing.py`.
+Variation comes from `_pick()`, which chooses between at least three
+hand-written phrasings per answer and never picks the same one twice running.
+So "what time is it" cycles through *"It is 9:04 pm"*, *"9:04 pm"*, *"Right now
+it's 9:04 pm"* — without a second model pass, and without any chance of being
+told something that was never looked up.
 
-`VOICE_PHRASE_SCOPE` controls who pays for it: `slow` (default) phrases only
-the answers that already went through the SLM to classify, so regex fast-path
-hits stay instant. `all` phrases everything and adds roughly 2–4 s to those
-hits. `off` restores the pre-2026-10-08 behaviour. Note that the fast path is
-there to catch your *common* phrasings, so on `slow` you will hear the plain
-sentences most often.
+> A second SLM pass that re-worded answers was built and reverted on
+> 2026-10-08: it worked, but the added latency was not worth it. Don't
+> re-propose it without latency measured on the Pi.
 
 ### Why the backend still composes the canonical sentence
 
-The backend owns the data, so it owns the claim. The pipeline only decides
-*what was asked*, and since 2026-10-08, *how to say it*. Keeping the canonical
-sentence server-side means the wording can change without touching the voice
-container, and — the original reason — it keeps a 1.5B model from inventing
-statuses it never looked up. The phrasing stage above does not weaken that: the
-model is handed the answer, never asked for it.
+The backend owns the data, so it owns the sentence. The pipeline only decides
+*what was asked*. This keeps response wording changeable without touching the
+voice container, and keeps a 1.5B model from inventing statuses it never looked
+up.
 
 ### Why intents are fetched from the API
 
@@ -338,10 +371,8 @@ Carried over from the prototype, all learned the hard way:
 6. **Whisper hallucinates on silence** — 8 s of room noise becomes "this." or
    "thank you." STT is skipped entirely unless the recorder's VAD saw speech.
 
-7. **Never let the model decide what is true.** A small model states inventory
-   and statuses it never looked up. It classifies, and it re-words answers it
-   was handed — and every rewrite is validated against the backend's facts
-   before being spoken. It never originates one.
+7. **Never let the model compose responses.** A small model states inventory
+   and statuses it never looked up. It returns structured data only.
 
 8. **USB mics usually refuse 16 kHz** via PortAudio. Capture at 48 kHz and
    decimate by 3. Naive decimation is fine for speech-band content.

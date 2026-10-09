@@ -21,7 +21,6 @@ from .api_client import BackendClient
 from .fastpath import FastPath
 from .heartbeat import Heartbeat
 from .helpers import downsample_mic, preprocess_transcript
-from .phrasing import ResponsePhraser
 from .recorder import CommandRecorder
 from .stt import load_whisper, transcribe
 from .tts import Speaker
@@ -61,23 +60,13 @@ class VoiceAssistant:
         self.fastpath = FastPath(self.catalog.names, enabled=config.FASTPATH_ENABLED)
 
         self.classifier = None
-        self.phraser = None
         if config.SLM_ENABLED:
             from .slm import IntentClassifier
             self.classifier = IntentClassifier(self.catalog)
             log.info("Warming up SLM...")
             self.classifier.warmup()
-
-            if config.PHRASE_SCOPE in ("slow", "all"):
-                # Shares the classifier's Llama deliberately — a second
-                # instance would be another ~1.2GB resident, and the stages
-                # are sequential so they never contend.
-                self.phraser = ResponsePhraser(self.classifier.llm)
-                log.info("Response phrasing enabled (scope=%s)", config.PHRASE_SCOPE)
         else:
             log.warning("SLM disabled; unmatched utterances will be 'unknown'")
-            if config.PHRASE_SCOPE != "off":
-                log.warning("Response phrasing needs the SLM; answers stay canonical")
 
         self.speaker = Speaker()
         self.input_device = config.resolve_device(config.INPUT_DEVICE, "input")
@@ -171,33 +160,11 @@ class VoiceAssistant:
         # point of showing it is to let the user see a misheard command early.
         self.activity.set("thinking", transcript=clean)
 
-        intent, item, by_slm = self._classify(clean)
+        intent, item = self._classify(clean)
 
-        answer = self.api.submit_intent(intent, item, transcript=clean)
-        speech = self._phrase(answer, by_slm)
-
+        speech = self.api.submit_intent(intent, item, transcript=clean)
         log.info("Speaking: %r", speech)
         self._say(speech, transcript=clean)
-
-    def _phrase(self, answer, by_slm: bool) -> str:
-        """Apply the persona to an answer, if this one qualifies.
-
-        Falls back to the backend's canonical sentence on every refusal, so
-        the worst case here is a plainer answer, never a wrong one.
-        """
-        if self.phraser is None or not answer.phrasable:
-            return answer.speech
-
-        # scope=slow: only answers that already paid for an SLM call get
-        # phrased, so a fast-path hit stays fast. See config.PHRASE_SCOPE for
-        # why that may be the wrong trade.
-        if config.PHRASE_SCOPE == "slow" and not by_slm:
-            return answer.speech
-
-        return self.phraser.phrase(
-            answer.speech, answer.facts,
-            answer.must_include, answer.forbid, answer.require_any,
-        )
 
     def _say(self, speech: str, transcript: str | None = None) -> None:
         """Speak, with the pill red and the dashboard dialog up for the duration.
@@ -209,25 +176,20 @@ class VoiceAssistant:
         self.activity.set("speaking", transcript=transcript, speech=speech)
         self.speaker.say(speech)
 
-    def _classify(self, text: str) -> tuple[str, str | None, bool]:
-        """Fast path first, SLM as fallback.
-
-        The third element says whether the SLM was used. Phrasing reads it:
-        under scope=slow, an utterance that already paid for a model call is
-        the only one that pays for a second.
-        """
+    def _classify(self, text: str) -> tuple[str, str | None]:
+        """Fast path first, SLM as fallback."""
         hit = self.fastpath.match(text)
         if hit is not None:
             intent, item = hit
             log.info("Classified by fast path: intent=%s item=%r", intent, item)
-            return intent, item, False
+            return intent, item
 
         if self.classifier is None:
-            return "unknown", None, False
+            return "unknown", None
 
         intent, item = self.classifier.classify(text)
         log.info("Classified by SLM: intent=%s item=%r", intent, item)
-        return intent, item, True
+        return intent, item
 
     def close(self) -> None:
         # Order matters: both threads use self.api, so they stop before the

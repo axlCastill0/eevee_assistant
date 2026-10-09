@@ -213,35 +213,6 @@ FASTPATH_ENABLED = _bool("VOICE_FASTPATH", True)
 # "unknown" instead of being classified.
 SLM_ENABLED = _bool("VOICE_SLM_ENABLED", True)
 
-# ============================================================================
-# RESPONSE PHRASING
-# ============================================================================
-# The backend composes a canonical sentence and ships the facts behind it. The
-# SLM can re-word that sentence so the assistant does not say the same thing
-# the same way forever. A rewrite that drops a required fact or names a healthy
-# service is discarded and the canonical sentence is spoken instead — see
-# phrasing.py.
-#
-# Scope, because this costs a second SLM call:
-#   off   never phrase; speak the backend's sentence (the behaviour before
-#         2026-10-08)
-#   slow  phrase only answers that already went through the SLM to classify.
-#         Fast-path hits stay instant and canned. DEFAULT, per USER.
-#         NOTE: the fast path exists to catch the COMMON phrasings, so this
-#         means the answers heard most often are the canned ones. Set `all`
-#         if that turns out to be the wrong trade on real hardware.
-#   all   phrase every phrasable answer. Adds roughly 2-4s to a fast-path hit.
-PHRASE_SCOPE = _str("VOICE_PHRASE_SCOPE", "slow").strip().lower()
-
-# Variation is the entire point, so this is NOT the classifier's 0.0.
-PHRASE_TEMPERATURE = _float("VOICE_PHRASE_TEMPERATURE", 0.8)
-
-# One short spoken sentence. A low cap is also a cheap guard against the model
-# deciding to explain itself.
-PHRASE_MAX_TOKENS = _int("VOICE_PHRASE_MAX_TOKENS", 48)
-
-# How the assistant addresses you, used sparingly. Empty string disables it.
-PERSONA_ADDRESS = _str("VOICE_PERSONA_ADDRESS", "sir").strip()
 
 # ============================================================================
 # LOGGING

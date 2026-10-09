@@ -22,9 +22,12 @@ apps/
   backend/            FastAPI service. Owns data + response wording.
     main.py           App entrypoint, root logging, GET /
     auth.py           X-API-Key dependency, shared by all routes
-    events.py         VOICE EVENT HUB - in-memory fan-out behind the WS
-    intents.py        INTENT REGISTRY - single source of truth; handlers
-                      return Answer(speech, facts, re-wording contract)
+    events.py         VOICE EVENT HUB - in-memory fan-out behind the WS;
+                      also publish_command() for theme/screen instructions
+    intents.py        INTENT REGISTRY - single source of truth; handlers and
+                      their hand-written phrasing variants
+    sysinfo.py        host uptime + SoC temperature, read from /proc and /sys
+    weather.py        Open-Meteo lookup, cached, no API key
     services.py       SERVICE HEALTH - heartbeat registry + summarize()
     routes/
       __init__.py     Empty, marks package
@@ -46,7 +49,6 @@ apps/
       stt.py          faster-whisper tiny.en int8
       fastpath.py     Regex pre-classifier, tried BEFORE the SLM
       slm.py          Qwen2.5 + GBNF grammar built from the API catalogue
-      phrasing.py     SLM re-wording of the backend's answer + its validator
       activity.py     StateReporter: queued, off-thread voice state publishing
       api_client.py   httpx client; failure-tolerant, never raises upward
       heartbeat.py    Daemon thread posting /voice/heartbeat every 15s
@@ -77,6 +79,7 @@ apps/
         DetailSheet                      drag-to-dismiss bottom sheet
         VoicePill                        top-bar activity pill + transcript
         VoiceDialog                      big-font answer, 7s hold
+        ScreenVeil                       black-out overlay for "screen off"
 infra/
   docker/
     docker-compose.yml       services: backend, voice (independent)
@@ -231,11 +234,6 @@ router-level `require_api_key` raises `HTTPException`, which has no meaning on
 a socket that has not been accepted. The handler checks the same header by hand
 and closes with 1008 instead, so the UI can tell "rejected" from "unreachable".
 
-`POST /voice/intent` returns `speech` (always safe to say) plus the re-wording
-contract: `facts`, `must_include`, `forbid`, `require_any`, `phrasable`. See
-`## response phrasing`. All five are optional on the wire, so a voice container
-older than 2026-10-08 just speaks `speech`.
-
 `POST /voice/intent` body: `{intent, item?, transcript?}`. Unknown intent names
 are downgraded to `"unknown"` rather than rejected — the classifier is not
 trusted to be correct. `item` is forced to null for intents with
@@ -244,7 +242,7 @@ trusted to be correct. `item` is forced to null for intents with
 ## voice pipeline
 
 ```yaml
-flow: wake_word -> record(VAD) -> STT -> fastpath|SLM -> HTTP -> [phrase] -> TTS
+flow: wake_word -> record(VAD) -> STT -> fastpath|SLM -> HTTP -> TTS
 
 activity: every stage transition is published to the backend for the
   dashboard's pill. Emitted at: greeting (speaking->ready), wake word
@@ -344,23 +342,25 @@ why: the prototype had three places to keep in sync (prompt, grammar, handler
 
 adding_an_intent:
   1. add an Intent to INTENTS in apps/backend/intents.py
-  2. write a handler returning an Answer and register it in _HANDLERS.
-     If the answer states a fact, fill facts/must_include/forbid/require_any
-     so the phrasing stage cannot drift from it. See `## response phrasing`.
+  2. write a handler returning (speech, ok) and register it in _HANDLERS.
+     Give it AT LEAST THREE phrasings via _pick() — see `## answer phrasing`.
   3. add a row to `## routes` only if a new endpoint was added
   4. restart the voice container (it refetches on boot)
   5. optionally add fastpath.py rules once the real phrasings are known
   NOTHING in apps/voice/ needs to change for a new intent.
 
-current_intents: [system_health, get_time, unknown]
+current_intents: [system_health, get_time, get_date, greeting, repeat_last,
+                  set_theme, wake_screen, sleep_screen, get_weather,
+                  list_capabilities, get_uptime, cpu_temp, unknown]
+  set_theme is the ONLY one with needs_item: true (dark|light|auto)
 
 system_health:
   scope: ALL services at once. There is deliberately NO per-service intent -
          "is the voice pipeline up" is still system_health with item null.
   speech: "Everything good." when all healthy, else the down services named
           ("voice is down." / "a and b are down." / "a, b, and c are down.")
-  composed_by: services.summarize(). This is the CANONICAL sentence; the SLM
-          may re-word it within the contract - see `## response phrasing`.
+  composed_by: services.summarize(), given a varied lead-in by
+          intents._system_health(). The NAMES always come from summarize().
 ```
 
 ## service health
@@ -508,75 +508,78 @@ REACT GOTCHA (cost a round trip 2026-10-08): the dialog's 7s timer originally
   that flag to the effect run instead.
 ```
 
-## response phrasing
+## answer phrasing
 
 ```yaml
-added: 2026-10-08 (USER SPEC). SUPERSEDES part of the 2026-10-04 decision
-       "backend composes the speech string" - see the decisions table.
+rule: EVERY spoken word in this system is written by a person, in
+      apps/backend/intents.py. The language model classifies and does nothing
+      else. A 1.5B model will state that a service is running without having
+      looked.
 
-what changed: the backend still decides WHAT IS TRUE and still composes a
-  canonical sentence. The SLM may now re-word that sentence so the assistant
-  does not say the same thing the same way forever. It is never told to work
-  out a fact; it is handed one.
+HISTORY, so this is not re-proposed: a second SLM pass that re-worded the
+  backend's answer was built on 2026-10-08 and REVERTED the same day — the
+  user found the added latency worse than expected. It worked and was
+  validated; it was simply not worth the wait. Do not revisit without real
+  latency numbers measured on the Pi.
 
-why the original rule still holds: a 1.5B model will state that a service is
-  running without having looked. It still would. It is simply no longer the
-  thing that looked.
+variation: intents._pick(*options) chooses between hand-written phrasings.
+  MINIMUM THREE per answer, including the failure branches ("I can't read the
+  temperature sensor") — those are heard as often as the happy ones when
+  something is misconfigured.
 
-the contract (backend/intents.py Answer -> POST /voice/intent):
-  speech        canonical sentence, ALWAYS safe to say verbatim
-  facts         structured truth, handed to the phrasing prompt
-  must_include  substrings a rewrite MUST keep (down service names, the digits
-                of the time). Case-insensitive substring match.
-  forbid        substrings a rewrite must NOT contain. WORD-BOUNDARY matched,
-                so forbidding "voice" does not reject "invoice".
-  require_any   at least one must appear. This is what carries POLARITY:
-                must_include=["voice"] is satisfied just as well by "voice is
-                up and running", so a down-service answer also has to contain
-                a word that means down.
-  phrasable     false for lines spoken when something is already broken
+_pick NEVER repeats back-to-back. With three options, plain random repeats
+  about a third of the time, which reads as broken rather than random.
 
-validation lives in voice/phrasing.py and REJECTS rather than corrects. A
-  rejected rewrite costs naturalness, never accuracy - the canonical sentence
-  is spoken instead and the reason is logged at INFO.
+  THE TRAP: _pick keys on the CALL SITE (sys._getframe(1), filename + line),
+  not on the option strings. Most variants are f-strings, so they are fresh
+  objects on every call — the first version keyed on id(options[0]) and
+  therefore remembered nothing, repeating 7 times in 20 draws. Do not
+  "simplify" it back to keying on the strings.
 
-polarity rules, concretely:
-  all healthy  -> forbid EVERY service name. Naming a service when nothing is
-                  wrong is the exact shape a hallucinated outage takes, and
-                  "all clear" / "no issues" / "nothing is down" all still pass.
-  something down -> require every down name, require a word from
-                  intents._DOWN_MARKERS, AND forbid the healthy names.
-                  THE TRADE: this loses the genuinely good "backend's fine,
-                  but voice is down". Accepted deliberately - the one failure
-                  this must not have is naming the wrong service as broken.
+repeat_last: `intents._last_spoken` is set by handle() for every intent
+  EXCEPT repeat_last itself, or asking twice would nest into
+  "I said: I said: ...". Module state on purpose: a repeat surviving a
+  restart would be a surprise, not a feature.
 
-scope (VOICE_PHRASE_SCOPE, default "slow", USER CHOICE):
-  off   never phrase
-  slow  only answers the SLM already classified. Fast-path hits stay canned.
-  all   everything phrasable; adds ~2-4s to a fast-path hit
-  KNOWN WRINKLE, flagged to the user 2026-10-08: the fast path exists to catch
-  the COMMON phrasings, so "slow" means the answers heard most often are the
-  canned ones and the persona is only heard on unusual wordings. The knob
-  exists so this can be flipped after hearing it on real hardware.
+facts stay in one place: where a sentence contains data (the down service
+  names, the time, a temperature), the variation is in the lead-in and the
+  data is interpolated once. Never write the same fact into three strings.
+```
 
-persona: dry, composed, economical, lightly wry - "Jarvis / Friday" (USER).
-  Addresses the user as VOICE_PERSONA_ADDRESS (default "sir") about one reply
-  in three; empty string removes the rule entirely.
+## panel commands (theme and screen)
 
-model instance: ResponsePhraser takes the CLASSIFIER'S Llama. Do not load a
-  second one - it is another ~1.2GB resident next to Chromium, and the stages
-  are sequential so they can never contend. The two use different system
-  prompts, so the KV cache is cold on every switch; the phrasing prompt is
-  kept short for that reason.
+```yaml
+added: 2026-10-08. Rides the voice event WebSocket built the same day.
 
-sampling: temperature 0.8 and NO grammar, unlike classification's 0.0 +
-  GBNF. Variation is the feature. A grammar could constrain shape but not
-  meaning, which is what actually needs guarding - hence the validator.
+transport: events.hub.publish_command(name, value) ->
+           {"type":"command","command":...,"value":...} over WS /voice/events
+           -> useVoiceEvents -> App.tsx effect.
 
-hardcoded, never phrased (USER DECISION): the unknown intent, every backend
-  and API error line, and the mic/STT failures. All are spoken exactly when
-  something is already broken, and the first two have no facts to ground a
-  rewrite in anyway.
+NOT RETAINED, and outside the state sequence. A command is a thing that
+  happened once; replaying "screen off" to a browser that reconnects an hour
+  later would re-blank a panel somebody is using. Retained state answers
+  "what is true", commands answer "do this now".
+
+commands:
+  set_theme     value dark|light|auto -> useTheme.choose(), persisted
+  sleep_screen  -> ScreenVeil
+  wake_screen   -> clears it
+
+repeated identical commands DO apply again: the UI keys the effect on the
+  command object's identity, which is fresh every time. Verified by sending
+  sleep_screen twice.
+
+SCREEN OFF IS AN OVERLAY, NOT DISPLAY POWER-OFF:
+  a browser cannot DPMS, and the backend runs in a container with no access
+  to the host's compositor. ScreenVeil paints pure #000 (not --bg: the dark
+  theme's #08090b is still visibly lit in a dark room) and is tappable, so
+  nobody has to talk to a black screen to get it back.
+  REAL power-off needs a host helper — `wlopm --off \*` under labwc, or
+  `xset dpms force off` under X11 — plus something to call it. Worth doing
+  later; this version needs no new privileges and works today.
+
+an unrecognised command is IGNORED by the UI, not guessed at: that is a
+  backend newer than the bundle, which happens on every partial deploy.
 ```
 
 ## testing
@@ -614,11 +617,20 @@ HOW TO VERIFY INSTEAD - all of it works without audio hardware or models:
     curl -X POST -H "X-API-Key: dev" .../voice/heartbeat   # -> Everything good.
     (wait 3s)                                              # -> voice is down.
 
-  the re-wording contract (no model needed):
+  every intent, without audio hardware:
+    for i in get_time get_date greeting get_uptime cpu_temp get_weather \\
+             list_capabilities repeat_last system_health unknown; do
+      curl -s -H "X-API-Key: dev" -H 'Content-Type: application/json' \\
+        -d "{\"intent\":\"$i\"}" -X POST .../voice/intent; echo
+    done
+    # ask the same one 3+ times: the wording must change, and must never
+    # repeat back-to-back
+
+  theme and screen (watch the dashboard while this runs):
     curl -s -H "X-API-Key: dev" -H 'Content-Type: application/json' \\
-      -d '{"intent":"system_health"}' -X POST .../voice/intent
-    # facts/must_include/forbid/require_any must match the real health, and
-    # must_include MUST name every down service
+      -d '{"intent":"set_theme","item":"dark"}' -X POST .../voice/intent
+    curl -s -H "X-API-Key: dev" -H 'Content-Type: application/json' \\
+      -d '{"intent":"sleep_screen"}' -X POST .../voice/intent
 
   voice pill and answer dialog, without the pipeline:
     for s in listening thinking speaking ready; do
@@ -700,10 +712,10 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `VOICE_STATE_EVENTS` | no | voice `activity.py` | default true; false stops publishing and the pill reads "unknown" |
 | `VOICE_STATE_EVENT_TIMEOUT_S` | no | voice `api_client.py` | default 1.0; deliberately shorter than `VOICE_API_TIMEOUT_S` |
 | `VOICE_WHISPER_ALLOW_DOWNLOAD` | no | voice `config.py` | default false. True lets Whisper fetch from HuggingFace; see the boot gotcha below |
-| `VOICE_PHRASE_SCOPE` | no | voice `config.py` | `off`\|`slow`\|`all`; default `slow`. Which answers the SLM re-words |
-| `VOICE_PHRASE_TEMPERATURE` | no | voice `phrasing.py` | default 0.8; variation is the point |
-| `VOICE_PHRASE_MAX_TOKENS` | no | voice `phrasing.py` | default 48; one short spoken sentence |
-| `VOICE_PERSONA_ADDRESS` | no | voice `phrasing.py` | default `sir`; empty string removes the address rule |
+| `WEATHER_LAT` | no | backend `weather.py` | required for get_weather; without it the intent says so |
+| `WEATHER_LON` | no | backend `weather.py` | as above |
+| `WEATHER_PLACE` | no | backend `weather.py` | spoken aloud ("12 degrees in Toronto"); empty omits it |
+| `WEATHER_UNITS` | no | backend `weather.py` | `celsius` (default) or `fahrenheit` |
 | `VOICE_STATE_REPEAT_S` | no | voice `activity.py` | default = `VOICE_HEARTBEAT_INTERVAL_S`; re-sends the current state so the pill survives a backend restart. 0 disables |
 | `SERVICE_STALE_AFTER_S` | no | backend `services.py` | default 45.0; must stay a multiple of the send interval |
 | `BACKEND_VERBOSE` | no | backend `main.py` | DEBUG logs |
@@ -944,12 +956,13 @@ xterm_is_required:
 | 2026-10-08 | the UI ignores the retained event for the dialog, not the pill | the pill wants the replayed state; the dialog replaying it meant every kiosk reload popped up the last answer |
 | 2026-10-08 | pill falls back to the heartbeat when voice is down | the event stream only reports what a live pipeline says; a pipeline that died mid-utterance would leave the pill green forever |
 | 2026-10-08 | Whisper loads with `local_files_only=True` by default | the weights are baked in, and letting faster-whisper revalidate against HF turned a healthy cache into a boot failure on the real Pi. Opt back in with VOICE_WHISPER_ALLOW_DOWNLOAD |
-| 2026-10-08 | the SLM may RE-WORD the backend's answer | USER: wants variation, accepts the latency. PARTIALLY SUPERSEDES the 2026-10-04 "backend composes the speech string" row — the backend still decides what is true and still composes the canonical sentence; the model only chooses how to say it |
-| 2026-10-08 | rewrites are VALIDATED against a backend-supplied contract, and rejected | the 2026-10-04 reasoning ("stops a small model inventing statuses") was right and is unchanged. Rejection beats correction: a discarded rewrite costs naturalness, a wrong one costs trust in the panel |
-| 2026-10-08 | polarity is enforced with require_any, not just must_include | requiring the word "voice" is satisfied by "voice is up and running". Caught before shipping, 2026-10-08 |
-| 2026-10-08 | down-case forbids healthy service names | loses "backend's fine, but voice is down"; the trade is deliberate, because naming the WRONG service as broken is the one failure that matters |
-| 2026-10-08 | phrasing reuses the classifier's Llama | a second instance is ~1.2GB resident next to Chromium, for stages that are sequential anyway |
-| 2026-10-08 | VOICE_PHRASE_SCOPE defaults to `slow` | USER CHOICE. Flagged at the time: the fast path catches the common phrasings, so this means the persona is heard least on the things asked most. Knob exists to flip it |
+| 2026-10-08 | SLM response re-wording BUILT AND THEN REVERTED, same day | USER tried it and the latency was worse than expected. The 2026-10-04 rule stands unchanged: the model classifies, the backend writes every word. Do not propose this again without new latency numbers from the Pi |
+| 2026-10-08 | variation comes from hand-written variants, >=3 per answer | gives the thing the re-wording was wanted for at zero latency and zero risk of a model stating something it never looked up |
+| 2026-10-08 | _pick() refuses to repeat back-to-back | plain random repeats about a third of the time with three options, which reads as broken. Keyed on CALL SITE, not string identity — f-string variants are new objects every call, which is how the first version silently remembered nothing |
+| 2026-10-08 | nine new intents, all answered from local data except weather | everyday questions the panel can answer without an account anywhere |
+| 2026-10-08 | theme + screen reach the panel over the event bus as COMMANDS | not retained and outside the state sequence: replaying "screen off" to a browser reconnecting an hour later would fight the user |
+| 2026-10-08 | "screen off" is a black overlay, NOT display power-off | a browser cannot DPMS, and the backend is in a container with no compositor access. Real power-off needs a host helper; the overlay kills the light today with no new privileges |
+| 2026-10-08 | weather via Open-Meteo, urllib, no key | the only intent needing the network; a provider requiring a secret would be the heaviest dependency in the project. urllib because one GET per 10 min does not justify a third HTTP client |
 | 2026-10-08 | ALL automated tests deleted; none to be added | USER DECISION: single-user project, one operator, and the suites were more code than the features they guarded. Verification is manual and live - see `## testing` |
 
 ## verified
@@ -1044,30 +1057,39 @@ passed:
       against a REFUSED port, both load fine - which is why this never
       reproduced without the hang-up server, and why a dev box with no network
       is not a valid test of it"
-  - "RESPONSE PHRASING, live backend on :8777:
-      POST /voice/intent now returns facts + must_include + forbid +
-      require_any + phrasable, for both the healthy and the voice-down case,
-      and phrasable=false for unknown"
-  - "phrasing.validate() exercised against 31 hand-written rewrites covering
-     every rule: hallucinated outage REJECTED, wrong service REJECTED,
-     softened-to-fine REJECTED, inverted polarity ('voice is up and running')
-     REJECTED, wrong time REJECTED, dropped meridiem REJECTED, JSON leak and
-     rambling REJECTED; 'nothing is down' / 'no issues' / 'invoice' ACCEPTED
-     (word-boundary matching), quoted output unwrapped. All 31 as designed."
-  - "ResponsePhraser against a stub Llama: good rewrite used; hallucination,
-     wrong service, inverted polarity, model exception and rambling all fall
-     back to the canonical sentence; an answer with no facts never calls the
-     model at all; temperature 0.8, no grammar, facts present in the prompt,
-     address rule present and removable"
+  - "13 INTENTS, live backend: every handler returns a sentence; set_theme
+     maps synonyms (night->dark) and rejects nonsense ('purple') with help
+     rather than an error; repeat_last never nests ('I said: I said:') and
+     says so when there is nothing behind it; unknown still hardcoded"
+  - "PHRASING VARIATION: 30 consecutive calls per intent -> 0 back-to-back
+     repeats, after fixing _pick's call-site key. AST check: every _pick group
+     in the module has >= 3 options"
+  - "FAST PATH: 35 routing probes across all 13 intents, 35/35 as intended,
+     including the four that MUST fall through to the SLM ('tell me a joke',
+     'turn on the lights', 'play some music', 'hello can you turn on the
+     lights'). Conflicts found and resolved: 'go dark' belongs to
+     sleep_screen not set_theme, and bare 'wake up' must be wake_screen
+     because sleep_screen's reply tells the user to say it"
+  - "SYSINFO against a fabricated /sys tree: picks the cpu-thermal zone over
+     a bogus zone0 reading 0C; hot (83C), warm (72C), cool (58C) and
+     no-sensor paths all produce the right sentence; human_duration across
+     30s/90s/1h/1.5h/1d/4d"
+  - "WEATHER live against Open-Meteo: real reading for Toronto, spoken three
+     ways. CERTIFICATE_VERIFY_FAILED found on the dev host and fixed via a
+     certifi-preferring SSL context plus ca-certificates in the backend image"
+  - "THEME + SCREEN in Chromium against the live backend: set_theme light/
+     dark/auto all applied and persisted to localStorage; sleep_screen raised
+     the veil, wake_screen cleared it, a REPEATED sleep_screen applied again
+     (not swallowed), and tapping the veil dismissed it without the assistant"
 
 NOT verified - no hardware available:
-  - the phrasing stage end to end. The validator and the fallback paths are
-    exercised above against a stub, but no sentence has ever been generated by
-    the real Qwen2.5-1.5B, so the REJECTION RATE is unknown. If the persona is
-    rarely heard, log-grep for "Rewrite rejected" before changing the prompt —
-    the reason is logged every time.
-  - pipeline.py's _phrase() scope gating (needs sounddevice + numpy, which the
-    dev host does not have). Four lines, reviewed by inspection only.
+  - sysinfo.py against the REAL Pi. /proc/uptime is safe, but the thermal zone
+    layout was faked on the dev host — macOS has neither path. Confirm
+    `cat /sys/class/thermal/thermal_zone*/type` on the Pi shows cpu-thermal.
+  - the SLM classifying the nine new intents. The grammar and prompt examples
+    are in place and the fast path covers the common phrasings, but no model
+    has been asked to choose between 13 intents yet; the previous catalogue
+    had 3.
   - any audio path: mic capture, wake word, VAD, Whisper, Piper, playback
   - the SLM: model not downloaded, llama-cpp-python not installed
   - the nginx `location = /api/voice/events` block. No nginx binary and no
@@ -1114,6 +1136,10 @@ unstarted:
   - no CI
   - heartbeat history is not persisted, so the trail resets on reload. Real
     uptime history needs server-side storage.
+  - "screen off" is a UI overlay, not display power-off. A host helper
+    (`wlopm --off \*` under labwc) would make it real; see `## panel commands`.
+  - weather has no forecast, only current conditions, and no "will it rain
+    later". Open-Meteo returns both; only `current` is requested.
   - no word-by-word streaming transcript. Would need Whisper re-run on a
     growing buffer during recording; declined 2026-10-08 (see `## decisions`).
     If revisited, VOICE_STATE_EVENTS and the `thinking` transcript field are

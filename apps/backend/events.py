@@ -119,6 +119,34 @@ class VoiceEventHub:
 
         return event
 
+    def publish_command(self, command: str, value: Optional[str] = None) -> dict:
+        """Send the dashboard an instruction (theme, screen) rather than a state.
+
+        Deliberately NOT retained and NOT part of the state sequence. A command
+        is a thing that happened once; replaying it to a browser that
+        reconnects an hour later would re-dim the screen or re-flip the theme
+        for no reason. Retained state answers "what is true", commands answer
+        "do this now", and conflating them is how a kiosk ends up fighting
+        the user.
+        """
+        event = {"type": "command", "command": command, "value": value,
+                 "at": time.time()}
+
+        for queue in list(self._subscribers):
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:      # pragma: no cover - raced
+                    pass
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:           # pragma: no cover - raced
+                pass
+
+        log.info("command -> %s=%r (%d dashboards)", command, value,
+                 len(self._subscribers))
+        return event
+
     # -- subscribing -------------------------------------------------------
 
     def subscribe(self) -> asyncio.Queue[dict]:

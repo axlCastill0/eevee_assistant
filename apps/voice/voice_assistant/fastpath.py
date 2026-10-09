@@ -78,6 +78,98 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     # "check the services" / "check everything"
     (re.compile(r"check\s+(on\s+)?(the\s+)?(services|systems|everything|health)", re.I),
      "system_health", None),
+
+    # -- get_date ---------------------------------------------------------
+    (re.compile(r"(what('?s| is)\s+)?(the\s+)?date", re.I), "get_date", None),
+    (re.compile(r"what('?s| is)\s+today('?s)?(\s+date)?", re.I), "get_date", None),
+    (re.compile(r"what\s+day\s+is\s+it(\s+today)?", re.I), "get_date", None),
+    (re.compile(r"what\s+day\s+of\s+the\s+week\s+is\s+it", re.I), "get_date", None),
+    (re.compile(r"(tell\s+me\s+)?(the\s+)?today('?s)?\s+date", re.I), "get_date", None),
+
+    # -- greeting ---------------------------------------------------------
+    # Anchored tightly: "hello" alone is a greeting, but "hello can you turn
+    # on the lights" is not, and fullmatch keeps those apart.
+    (re.compile(r"(hello|hi|hey|yo|howdy)(\s+there)?", re.I), "greeting", None),
+    (re.compile(r"good\s+(morning|afternoon|evening)", re.I), "greeting", None),
+    (re.compile(r"(are\s+you\s+)?(there|awake|up|online|listening)\??", re.I),
+     "greeting", None),
+
+    # -- repeat_last ------------------------------------------------------
+    # NOTE: these are written against the output of _strip_trailing, which
+    # removes a trailing "again". "say that again" arrives here as "say that",
+    # so matching the literal phrase would never fire. Same trap as "there" in
+    # the health rules. Do not "fix" these by adding \s+again back.
+    (re.compile(r"(can\s+you\s+|could\s+you\s+)?(say|repeat)\s+(that|it)", re.I),
+     "repeat_last", None),
+    (re.compile(r"(what\s+did\s+you\s+say|what\s+was\s+that)", re.I), "repeat_last", None),
+    (re.compile(r"repeat", re.I), "repeat_last", None),
+    (re.compile(r"come\s+again", re.I), "repeat_last", None),
+
+    # -- set_theme --------------------------------------------------------
+    # The item group is the theme name; the handler maps synonyms.
+    # "go" is deliberately NOT a verb here: "go dark" means the screen, not
+    # the palette, and sleep_screen claims it below.
+    (re.compile(r"(switch|change|set)\s+(to\s+|the\s+)?"
+                r"(?P<theme>dark|light|night|day|auto|automatic)(\s+mode|\s+theme)?", re.I),
+     "set_theme", "theme"),
+    (re.compile(r"(?P<theme>dark|light|night|day|auto|automatic)\s+(mode|theme)", re.I),
+     "set_theme", "theme"),
+    (re.compile(r"(set|change)\s+the\s+(theme|mode)\s+to\s+"
+                r"(?P<theme>dark|light|night|day|auto|automatic)", re.I),
+     "set_theme", "theme"),
+
+    # -- sleep_screen / wake_screen ---------------------------------------
+    (re.compile(r"(turn\s+)?(the\s+)?(screen|display|panel|monitor)\s+off", re.I),
+     "sleep_screen", None),
+    (re.compile(r"turn\s+off\s+(the\s+)?(screen|display|panel|monitor)", re.I),
+     "sleep_screen", None),
+    (re.compile(r"(go\s+)?(dark|to\s+sleep)", re.I), "sleep_screen", None),
+    (re.compile(r"(blank|dim|sleep)\s+(the\s+)?(screen|display)", re.I),
+     "sleep_screen", None),
+    (re.compile(r"good\s*night", re.I), "sleep_screen", None),
+
+    (re.compile(r"(turn\s+)?(the\s+)?(screen|display|panel|monitor)\s+(on|back\s+on)", re.I),
+     "wake_screen", None),
+    (re.compile(r"turn\s+on\s+(the\s+)?(screen|display|panel|monitor)", re.I),
+     "wake_screen", None),
+    (re.compile(r"wake(\s+up)?\s+(the\s+)?(screen|display|panel)", re.I),
+     "wake_screen", None),
+    # Bare "wake up" is the screen. sleep_screen's spoken reply tells the user
+    # to say exactly this, so it must not land on greeting.
+    (re.compile(r"wake\s+up", re.I), "wake_screen", None),
+
+    # -- get_weather ------------------------------------------------------
+    (re.compile(r"(what('?s| is)\s+)?(the\s+)?weather(\s+like)?(\s+outside|\s+today)?", re.I),
+     "get_weather", None),
+    (re.compile(r"how('?s| is)\s+(the\s+)?weather(\s+outside|\s+today)?", re.I),
+     "get_weather", None),
+    (re.compile(r"(what('?s| is)\s+)?(the\s+)?temperature\s+outside", re.I),
+     "get_weather", None),
+    (re.compile(r"is\s+it\s+(raining|snowing|cold|hot|warm|sunny)(\s+outside)?", re.I),
+     "get_weather", None),
+    (re.compile(r"(do\s+i\s+need\s+)(a\s+)?(coat|jacket|umbrella)", re.I),
+     "get_weather", None),
+
+    # -- list_capabilities ------------------------------------------------
+    (re.compile(r"what\s+can\s+(you|i)\s+(do|ask)(\s+you)?", re.I),
+     "list_capabilities", None),
+    (re.compile(r"(what\s+are\s+)?your\s+(capabilities|commands|features)", re.I),
+     "list_capabilities", None),
+    (re.compile(r"help(\s+me)?", re.I), "list_capabilities", None),
+    (re.compile(r"what\s+do\s+you\s+do", re.I), "list_capabilities", None),
+
+    # -- get_uptime -------------------------------------------------------
+    (re.compile(r"(what('?s| is)\s+)?(the\s+)?uptime", re.I), "get_uptime", None),
+    (re.compile(r"how\s+long\s+(have\s+you\s+been|has\s+(it|this|the\s+\w+)\s+been)"
+                r"\s+(up|running|on)", re.I), "get_uptime", None),
+    (re.compile(r"when\s+did\s+(you|it|this)\s+(boot|start|last\s+reboot)", re.I),
+     "get_uptime", None),
+
+    # -- cpu_temp ---------------------------------------------------------
+    (re.compile(r"(what('?s| is)\s+)?(the\s+)?(cpu\s+|processor\s+)?temp(erature)?", re.I),
+     "cpu_temp", None),
+    (re.compile(r"how\s+hot\s+(is|are)\s+(it|you|the\s+\w+)", re.I), "cpu_temp", None),
+    (re.compile(r"(are\s+you\s+)?(running\s+)?hot", re.I), "cpu_temp", None),
 ]
 
 

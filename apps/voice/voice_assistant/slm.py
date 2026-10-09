@@ -4,12 +4,9 @@ Output is constrained by a GBNF grammar built from the API's intent catalogue,
 which makes an invalid intent name literally impossible to generate. Without
 the grammar, Qwen invents plausible-sounding intents that no handler exists for.
 
-This module returns structured data only. It never decides what is true: a
-small model will happily state a service is running without having looked.
-
-Re-wording the backend's answer into something that does not sound canned is a
-SEPARATE stage, in phrasing.py, which shares this model but is given the facts
-and is validated against them.
+The model returns structured data only. Spoken responses are composed by the
+backend, never here — a small model will happily state a service is running
+without having looked.
 """
 from __future__ import annotations
 
@@ -39,8 +36,8 @@ Valid intents:
 
 Rules:
 - Pick exactly one intent. Never invent intent names.
-- "item" is the subject being asked about, lowercase, no articles. No current
-  intent takes one, so "item" is null unless a listed intent clearly needs it.
+- "item" is the subject being asked about, lowercase, no articles. Only
+  set_theme takes one today: "dark", "light" or "auto". Everything else is null.
 - For intents that take no item, "item" MUST be null.
 - Health questions cover ALL services at once. "is the voice pipeline up" is
   still system_health with item null, not a per-service query.
@@ -66,6 +63,39 @@ Output: {{"intent": "system_health", "item": null}}
 
 User: "what time is it"
 Output: {{"intent": "get_time", "item": null}}
+
+User: "what's today's date"
+Output: {{"intent": "get_date", "item": null}}
+
+User: "good evening"
+Output: {{"intent": "greeting", "item": null}}
+
+User: "sorry, what was that"
+Output: {{"intent": "repeat_last", "item": null}}
+
+User: "put the dashboard in dark mode"
+Output: {{"intent": "set_theme", "item": "dark"}}
+
+User: "switch the panel back to automatic"
+Output: {{"intent": "set_theme", "item": "auto"}}
+
+User: "kill the screen for now"
+Output: {{"intent": "sleep_screen", "item": null}}
+
+User: "bring the display back"
+Output: {{"intent": "wake_screen", "item": null}}
+
+User: "do I need an umbrella today"
+Output: {{"intent": "get_weather", "item": null}}
+
+User: "what sort of things can I ask you"
+Output: {{"intent": "list_capabilities", "item": null}}
+
+User: "how long since the last reboot"
+Output: {{"intent": "get_uptime", "item": null}}
+
+User: "is the pi running hot"
+Output: {{"intent": "cpu_temp", "item": null}}
 
 User: "tell me a joke"
 Output: {{"intent": "unknown", "item": null}}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import httpx
@@ -28,23 +28,6 @@ FALLBACK_INTENTS: dict[str, dict] = {
     "get_time": {"description": "ask for the current time", "needs_item": False},
     "unknown": {"description": "anything else", "needs_item": False},
 }
-
-
-@dataclass
-class Answer:
-    """What the backend decided, plus the contract for re-wording it.
-
-    `speech` is always safe to say as-is. The rest is only meaningful when
-    `phrasable` is true; see phrasing.ResponsePhraser.
-    """
-    speech: str
-    ok: bool = True
-    facts: dict = field(default_factory=dict)
-    must_include: list = field(default_factory=list)
-    forbid: list = field(default_factory=list)
-    require_any: list = field(default_factory=list)
-    phrasable: bool = False     # default False: an Answer built locally from a
-                                # failure has no facts to ground a rewrite in
 
 
 @dataclass
@@ -208,13 +191,11 @@ class BackendClient:
         return IntentCatalog(intents, from_api=True)
 
     def submit_intent(self, intent: str, item: Optional[str],
-                      transcript: Optional[str] = None) -> Answer:
-        """POST a classified intent and return the backend's Answer.
+                      transcript: Optional[str] = None) -> str:
+        """POST a classified intent and return the sentence to speak.
 
-        On any failure this returns a speakable Answer rather than raising, so
-        the user always hears something. Those failure answers are marked
-        unphrasable: the backend is the only thing that knows what is true, and
-        when it cannot be reached there is nothing to ground a rewrite in.
+        On any failure this returns a spoken explanation rather than raising,
+        so the user always hears something.
         """
         t0 = time.monotonic()
         resp = self._request("POST", "/voice/intent", json={
@@ -222,33 +203,20 @@ class BackendClient:
         })
 
         if resp is None:
-            return Answer("I can't reach the backend right now.", ok=False)
+            return "I can't reach the backend right now."
         if resp.status_code == 401:
-            return Answer("The backend rejected my credentials.", ok=False)
+            return "The backend rejected my credentials."
         if resp.status_code >= 500:
-            return Answer("The backend had an error.", ok=False)
+            return "The backend had an error."
         if resp.status_code != 200:
             log.error("POST /voice/intent -> %d: %s", resp.status_code, resp.text[:200])
-            return Answer("The backend didn't understand that request.", ok=False)
+            return "The backend didn't understand that request."
 
         try:
-            body = resp.json()
-            speech = body["speech"]
+            speech = resp.json()["speech"]
         except (KeyError, ValueError):
             log.error("Malformed /voice/intent response: %s", resp.text[:200])
-            return Answer("The backend sent back something I couldn't read.", ok=False)
+            return "The backend sent back something I couldn't read."
 
         log.debug("API (%.2fs): %r", time.monotonic() - t0, speech)
-
-        # Everything below is optional, so an older backend that does not send
-        # the phrasing contract simply yields an unphrasable answer instead of
-        # breaking the pipeline.
-        return Answer(
-            speech=speech,
-            ok=bool(body.get("ok", True)),
-            facts=body.get("facts") or {},
-            must_include=list(body.get("must_include") or []),
-            forbid=list(body.get("forbid") or []),
-            require_any=list(body.get("require_any") or []),
-            phrasable=bool(body.get("phrasable", False)),
-        )
+        return speech
