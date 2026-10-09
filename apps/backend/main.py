@@ -24,6 +24,10 @@ logging.basicConfig(
 app = FastAPI(title="Eevee Assistant Backend")
 
 app.include_router(voice.router, prefix="/voice", tags=["voice"])
+# Separate router: the WebSocket authenticates by hand, because the HTTP
+# router's require_api_key dependency raises HTTPException, which cannot be
+# delivered over a socket. See routes/voice.py.
+app.include_router(voice.ws_router, prefix="/voice", tags=["voice"])
 # No prefix: /services is system-wide, not scoped to a subsystem.
 app.include_router(status.router, tags=["status"])
 

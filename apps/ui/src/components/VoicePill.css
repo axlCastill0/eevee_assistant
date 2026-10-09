@@ -1,0 +1,160 @@
+/* Voice activity pill.
+ *
+ * PI PERFORMANCE: the only animated properties here are transform and opacity,
+ * both compositor-only. The colour change between states is a transition on
+ * declared custom properties, which repaints a pill-sized area once per
+ * transition — not per frame. No backdrop-filter, by project rule.
+ */
+
+.voicepill {
+  /* --vp is set per state below; everything else derives from it, so a new
+     state means one rule, not six. */
+  --vp: var(--text-faint);
+  --vp-wash: transparent;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-min);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-full);
+  background: var(--vp-wash);
+  border: 1px solid var(--vp);
+  /* Keeps the top bar from reflowing every time the label length changes
+     (Ready -> Listening -> Thinking). A jumping clock is very visible. */
+  min-width: 10.5rem;
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.voicepill__dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--vp);
+  transition: background-color var(--dur) var(--ease);
+}
+
+.voicepill__label {
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--vp);
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease);
+}
+
+.voicepill__transcript {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  /* One line, clipped. A long utterance must not be allowed to push the clock
+     off the bar; the full text is in the title attribute. */
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: fade-in var(--dur) var(--ease);
+}
+
+/* ---- states ------------------------------------------------------------- */
+
+.voicepill[data-state='ready'] {
+  --vp: var(--accent);
+  --vp-wash: var(--accent-wash);
+}
+
+.voicepill[data-state='listening'] {
+  --vp: var(--ok);
+  --vp-wash: var(--ok-wash);
+}
+
+.voicepill[data-state='thinking'] {
+  --vp: var(--warn);
+  --vp-wash: var(--warn-wash);
+}
+
+.voicepill[data-state='speaking'] {
+  --vp: var(--down);
+  --vp-wash: var(--down-wash);
+}
+
+/* offline and unknown both stay on the neutral --vp default: a pipeline that
+   has not checked in has no activity to report, and guessing a colour would
+   be the same lie as reporting a never-seen service as "unknown" instead of
+   down. */
+
+.voicepill[data-stale] {
+  opacity: 0.45;
+}
+
+/* ---- motion ------------------------------------------------------------- */
+
+/* The dot pulses only while the mic is actually open. This is the one piece of
+   motion on the panel that carries information: from across the room the pulse
+   is readable before the colour is. Transform-only, so it stays on the
+   compositor. */
+.voicepill[data-state='listening'] .voicepill__dot {
+  animation: voicepill-pulse 1.1s var(--ease) infinite;
+}
+
+/* Thinking gets a slower, smaller pulse so the two are distinguishable at a
+   glance even for a colour-blind viewer. */
+.voicepill[data-state='thinking'] .voicepill__dot {
+  animation: voicepill-pulse-soft 1.8s var(--ease) infinite;
+}
+
+@keyframes voicepill-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.55;
+  }
+}
+
+@keyframes voicepill-pulse-soft {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voicepill__dot {
+    animation: none !important;
+  }
+}
+
+/* ---- responsive --------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  /* The transcript is the first thing to go: the colour is the signal, the
+     text is the detail. */
+  .voicepill__transcript {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .voicepill {
+    min-width: 0;
+    padding: 0 var(--space-4);
+  }
+}
+
+@media (max-height: 700px) {
+  .voicepill {
+    min-height: 44px;
+  }
+}

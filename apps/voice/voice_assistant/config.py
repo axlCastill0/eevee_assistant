@@ -164,6 +164,27 @@ INTENTS_FETCH_TIMEOUT_S = _float("VOICE_INTENTS_FETCH_TIMEOUT_S", 3.0)
 # Set to 0 to disable.
 HEARTBEAT_INTERVAL_S = _float("VOICE_HEARTBEAT_INTERVAL_S", 15.0)
 
+# Report every stage transition (ready/listening/thinking/speaking) to
+# POST /voice/state so the dashboard's voice pill can change colour as it
+# happens. Posted from a background thread and never waited on, so the worst
+# case of a dead backend is a stale pill, not added latency.
+# Set to false to stop publishing (the dashboard then shows "unknown").
+STATE_EVENTS_ENABLED = _bool("VOICE_STATE_EVENTS", True)
+
+# Per-post timeout for state events, deliberately far shorter than
+# API_TIMEOUT_S. A state event is worthless the moment it is late, so a slow
+# backend should drop it rather than have the reporter thread queue up behind
+# it. No retries, for the same reason.
+STATE_EVENT_TIMEOUT_S = _float("VOICE_STATE_EVENT_TIMEOUT_S", 1.0)
+
+# Re-send the current state when nothing has changed for this long. The
+# backend's event hub is in-memory, so a backend restart forgets what the
+# pipeline is doing and the dashboard would sit on "unknown" until the next
+# utterance — possibly hours. The backend ignores an identical republish
+# (same state, same text) rather than treating it as a new event, so this
+# costs one loopback POST per interval and nothing else. 0 disables.
+STATE_REPEAT_S = _float("VOICE_STATE_REPEAT_S", HEARTBEAT_INTERVAL_S)
+
 # ============================================================================
 # FAST PATH
 # ============================================================================
@@ -176,6 +197,36 @@ FASTPATH_ENABLED = _bool("VOICE_FASTPATH", True)
 # can run without it and save ~400 MB of RSS; unmatched utterances then become
 # "unknown" instead of being classified.
 SLM_ENABLED = _bool("VOICE_SLM_ENABLED", True)
+
+# ============================================================================
+# RESPONSE PHRASING
+# ============================================================================
+# The backend composes a canonical sentence and ships the facts behind it. The
+# SLM can re-word that sentence so the assistant does not say the same thing
+# the same way forever. A rewrite that drops a required fact or names a healthy
+# service is discarded and the canonical sentence is spoken instead — see
+# phrasing.py.
+#
+# Scope, because this costs a second SLM call:
+#   off   never phrase; speak the backend's sentence (the behaviour before
+#         2026-10-08)
+#   slow  phrase only answers that already went through the SLM to classify.
+#         Fast-path hits stay instant and canned. DEFAULT, per USER.
+#         NOTE: the fast path exists to catch the COMMON phrasings, so this
+#         means the answers heard most often are the canned ones. Set `all`
+#         if that turns out to be the wrong trade on real hardware.
+#   all   phrase every phrasable answer. Adds roughly 2-4s to a fast-path hit.
+PHRASE_SCOPE = _str("VOICE_PHRASE_SCOPE", "slow").strip().lower()
+
+# Variation is the entire point, so this is NOT the classifier's 0.0.
+PHRASE_TEMPERATURE = _float("VOICE_PHRASE_TEMPERATURE", 0.8)
+
+# One short spoken sentence. A low cap is also a cheap guard against the model
+# deciding to explain itself.
+PHRASE_MAX_TOKENS = _int("VOICE_PHRASE_MAX_TOKENS", 48)
+
+# How the assistant addresses you, used sparingly. Empty string disables it.
+PERSONA_ADDRESS = _str("VOICE_PERSONA_ADDRESS", "sir").strip()
 
 # ============================================================================
 # LOGGING

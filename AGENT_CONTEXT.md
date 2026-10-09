@@ -7,7 +7,7 @@ UPDATE THIS FILE IN THE SAME COMMIT AS ANY CHANGE IT DESCRIBES. See `## update_p
 meta:
   project: eevee_assistant
   root: /Users/tako/root/eevee_assistant
-  last_updated: 2026-10-04
+  last_updated: 2026-10-08
   git_branch_main: main
   target_host: Raspberry Pi 5 (8GB recommended), Raspberry Pi OS Lite 64-bit
                CONFIRMED 2026-10-07: the Pi runs Trixie (Debian 13), aarch64.
@@ -22,20 +22,19 @@ apps/
   backend/            FastAPI service. Owns data + response wording.
     main.py           App entrypoint, root logging, GET /
     auth.py           X-API-Key dependency, shared by all routes
+    events.py         VOICE EVENT HUB - in-memory fan-out behind the WS
     intents.py        INTENT REGISTRY - single source of truth; handlers
+                      return Answer(speech, facts, re-wording contract)
     services.py       SERVICE HEALTH - heartbeat registry + summarize()
-    conftest.py       Puts apps/backend on sys.path for pytest
     routes/
       __init__.py     Empty, marks package
-      voice.py        /voice/health, /voice/heartbeat, /voice/intents, /voice/intent
+      voice.py        /voice/health, /voice/heartbeat, /voice/intents,
+                      /voice/intent, /voice/state, WS /voice/events
       status.py       GET /services - the dashboard's data source
-    tests/
-      test_services.py   13 tests: heartbeat staleness, phrasing, monotonic clock
     requirements.txt
     .env.example
   voice/              Voice pipeline. Separate container, separate lifecycle.
     run.py            Entrypoint; loads .env BEFORE importing config
-    conftest.py       Puts apps/voice on sys.path for pytest
     requirements.txt
     .env.example      For bare-metal runs only; Docker uses infra/docker/.env
     voice_assistant/
@@ -47,14 +46,13 @@ apps/
       stt.py          faster-whisper tiny.en int8
       fastpath.py     Regex pre-classifier, tried BEFORE the SLM
       slm.py          Qwen2.5 + GBNF grammar built from the API catalogue
+      phrasing.py     SLM re-wording of the backend's answer + its validator
+      activity.py     StateReporter: queued, off-thread voice state publishing
       api_client.py   httpx client; failure-tolerant, never raises upward
       heartbeat.py    Daemon thread posting /voice/heartbeat every 15s
       tts.py          Piper TTS + output resampling
       pipeline.py     Main loop wiring every stage
       devices.py      `python -m voice_assistant.devices` audio device lister
-    tests/
-      test_fastpath.py   44 tests total, no models/hardware needed
-      test_grammar.py
   ui/                 Dashboard. Vite + React + TS, static build, nginx-served.
     index.html        Inline bg style prevents a white flash on cold boot
     vite.config.ts    Dev-only /api proxy that injects the key like nginx does
@@ -68,6 +66,7 @@ apps/
       lib/
         api.ts        fetch wrapper -> /api; maps gateway 5xx to "unreachable"
         useServices.ts  3s poll + client-side heartbeat history
+        useVoiceEvents.ts  WebSocket to /api/voice/events; reconnect + watchdog
         useTheme.ts   light/dark/auto, boundary timer, RTC guard
         useClock.ts   second-aligned tick (plain intervals drift)
         format.ts     durations, clock, labels
@@ -76,6 +75,8 @@ apps/
         Overview                         hero; reuses backend's speech string
         ServiceTile/Sparkline/StatusDot  per-service tile
         DetailSheet                      drag-to-dismiss bottom sheet
+        VoicePill                        top-bar activity pill + transcript
+        VoiceDialog                      big-font answer, 7s hold
 infra/
   docker/
     docker-compose.yml       services: backend, voice (independent)
@@ -218,9 +219,22 @@ per-endpoint. Verified: all four endpoints return 401 unauthenticated.
 | POST | `/voice/heartbeat` | `routes/voice.py` | yes | `{"status","stale_after_s"}` |
 | GET | `/voice/intents` | `routes/voice.py` | yes | `{"intents":{name:{description,needs_item}}}` |
 | POST | `/voice/intent` | `routes/voice.py` | yes | `{"speech","intent","item","ok"}` |
+| POST | `/voice/state` | `routes/voice.py` | yes | `{"status","seq"}` — pipeline reports a stage transition |
+| GET | `/voice/state` | `routes/voice.py` | yes | `{"event","subscribers"}` — last known activity |
+| WS | `/voice/events` | `routes/voice.py` | yes (manual) | voice activity stream for the dashboard |
 
 `/services` is unprefixed because it is system-wide, not scoped to a
 subsystem. It is the dashboard's data source and must work when voice is down.
+
+`WS /voice/events` is on `voice.ws_router`, NOT the guarded router: the
+router-level `require_api_key` raises `HTTPException`, which has no meaning on
+a socket that has not been accepted. The handler checks the same header by hand
+and closes with 1008 instead, so the UI can tell "rejected" from "unreachable".
+
+`POST /voice/intent` returns `speech` (always safe to say) plus the re-wording
+contract: `facts`, `must_include`, `forbid`, `require_any`, `phrasable`. See
+`## response phrasing`. All five are optional on the wire, so a voice container
+older than 2026-10-08 just speaks `speech`.
 
 `POST /voice/intent` body: `{intent, item?, transcript?}`. Unknown intent names
 are downgraded to `"unknown"` rather than rejected — the classifier is not
@@ -230,7 +244,15 @@ trusted to be correct. `item` is forced to null for intents with
 ## voice pipeline
 
 ```yaml
-flow: wake_word -> record(VAD) -> STT -> fastpath|SLM -> HTTP -> TTS
+flow: wake_word -> record(VAD) -> STT -> fastpath|SLM -> HTTP -> [phrase] -> TTS
+
+activity: every stage transition is published to the backend for the
+  dashboard's pill. Emitted at: greeting (speaking->ready), wake word
+  (listening), end of recording (thinking), transcript ready (thinking +
+  text), TTS start (speaking + text), end of utterance (ready), shutdown
+  (offline). Every spoken line - including the error paths - goes through
+  VoiceAssistant._say(), so the dialog can never be skipped for exactly the
+  messages worth reading. See `## voice activity`.
 
 models:
   baked_into_image:          # no network needed on first boot
@@ -300,7 +322,9 @@ why: the prototype had three places to keep in sync (prompt, grammar, handler
 
 adding_an_intent:
   1. add an Intent to INTENTS in apps/backend/intents.py
-  2. add a handler branch in intents.handle()
+  2. write a handler returning an Answer and register it in _HANDLERS.
+     If the answer states a fact, fill facts/must_include/forbid/require_any
+     so the phrasing stage cannot drift from it. See `## response phrasing`.
   3. add a row to `## routes` only if a new endpoint was added
   4. restart the voice container (it refetches on boot)
   5. optionally add fastpath.py rules once the real phrasings are known
@@ -313,7 +337,8 @@ system_health:
          "is the voice pipeline up" is still system_health with item null.
   speech: "Everything good." when all healthy, else the down services named
           ("voice is down." / "a and b are down." / "a, b, and c are down.")
-  composed_by: services.summarize()
+  composed_by: services.summarize(). This is the CANONICAL sentence; the SLM
+          may re-word it within the contract - see `## response phrasing`.
 ```
 
 ## service health
@@ -362,6 +387,234 @@ adding_a_tracked_service:
   2. have it POST /voice/heartbeat (or add a dedicated endpoint) on a timer
      faster than SERVICE_STALE_AFTER_S
   Nothing else changes - summarize() and /services pick it up automatically.
+```
+
+## voice activity (the pill and the answer dialog)
+
+```yaml
+added: 2026-10-08 (USER SPEC)
+purpose: the user has to know WHEN to speak, and be able to read the answer
+         from across the room.
+
+transport: WEBSOCKET. GET (upgrade) /voice/events, pushed from the backend.
+  publisher: voice pipeline -> POST /voice/state
+  subscriber: dashboard -> WS /voice/events (through nginx, which injects the key)
+  NOT polled: a 3s poll shows "listening" an average of 1.5s late, i.e. after
+              the user has already spoken into a pipeline that was not
+              recording. This is the only state in the system that must be
+              pushed. See `## mqtt` for why not MQTT.
+  MEASURED 2026-10-08: POST -> browser receives = 0.8-1.2ms on the dev host.
+
+states (backend/events.py STATES, ui VoicePill colours):
+  ready      blue   --accent   wake word armed
+  listening  green  --ok       mic open; pulsing dot
+  thinking   amber  --warn     STT + classification; slow pulse
+  speaking   red    --down     assistant has the floor
+  offline    grey              pipeline not running
+  unknown    grey              nothing heard from it yet this backend process
+  red is NOT an error here; it is "do not talk over this".
+  an unrecognised state is downgraded to "unknown", never rejected - same
+  posture as an unknown intent name.
+
+retained event: the hub keeps the last event and sends it to every new
+  subscriber, so a kiosk reload paints the right colour immediately instead of
+  waiting for the next utterance, which may be hours away. This is the one
+  part of MQTT's semantics that was actually needed.
+  THE UI MUST DISTINGUISH IT: useVoiceEvents flags the first message of each
+  connection as `retained`, and VoiceDialog ignores those. Without that, every
+  reload re-announced whatever was last spoken. Seen doing exactly that on
+  2026-10-08.
+
+republish + dedupe: the hub is in-memory, so a backend restart forgets the
+  state and the pill would sit on "unknown" until the next utterance. The
+  reporter re-sends the current state every VOICE_STATE_REPEAT_S (default: the
+  heartbeat interval, 15s). The hub treats an IDENTICAL republish as a refresh
+  - it moves `at`, does NOT bump `seq`, and does NOT re-broadcast - so the
+  dashboard never reads a repeat as a new answer. Any changed field is a real
+  event, which is what makes `thinking` -> `thinking + transcript` work.
+
+offline override (ui App.tsx): the event stream reports what the pipeline SAYS
+  it is doing, so a pipeline that died mid-utterance would leave the pill stuck
+  on green. A voice service the backend reports unhealthy overrides the last
+  event. The DIALOG deliberately uses the raw event state instead: an answer
+  arriving is itself proof the pipeline is alive, and the override would
+  suppress exactly the dialog the user is waiting on if a beat were late.
+
+transcript: shown next to the pill, during `thinking` only. It is the FINAL
+  transcript, published the moment Whisper returns and before classification
+  (which is 4-5s away on an SLM fallback), so a misheard command is visible
+  early. There is no word-by-word streaming - see `## backlog`.
+
+dialog: VoiceDialog.tsx. Appears when speaking starts, holds 7s (HOLD_MS),
+  and stays past 7s if TTS is still going. Response text only (USER DECISION).
+  font-size clamp(2rem, 4.5vw + 0.8rem, 4rem) - the largest type on the panel.
+  HOLD_MS and the CSS drain animation duration must agree; both are 7s.
+
+keepalive: the backend sends {"type":"ping"} after 20s of silence
+  (PING_INTERVAL_S). Two things need it: nginx closes idle proxied connections,
+  and a suspended Pi network leaves a socket that looks open but is dead. The
+  UI treats 45s of total silence as a dead socket and reconnects.
+
+publisher is OFF-THREAD (voice/activity.py): `listening` is published before
+  recording starts, so a synchronous POST would put an HTTP round trip - and
+  with a dead backend, a full connect timeout - between the wake word and the
+  microphone. The queue is bounded (8) and drops the OLDEST on overflow,
+  because the newest event is the current state.
+
+single-process only, same constraint as services.py: with uvicorn
+  --workers > 1 each worker holds its own subscriber set and only the worker
+  that received the publish would forward it. Workers means Redis pub/sub.
+
+nginx: `location = /api/voice/events` is SEPARATE from `/api/`, because /api/
+  sets proxy_read_timeout 5s (right for a 3s poll, fatal for an idle socket).
+  The socket location gets 3600s plus the Upgrade/Connection headers.
+
+VITE DEV GOTCHA (cost a debugging round trip 2026-10-08): the dev proxy's
+  `proxyReq` event does NOT fire for WebSocket upgrades. Without a matching
+  `proxyReqWs` handler the socket reaches the backend with no API key and is
+  closed with 1008, which Chromium reports only as "WebSocket is closed before
+  the connection is established". Both handlers are now in vite.config.ts.
+  nginx has no such split.
+
+REACT GOTCHA (cost a round trip 2026-10-08): the dialog's 7s timer originally
+  lived in the same effect that latched the answer. That effect depends on
+  `speaking`, so React ran its cleanup when speaking flipped to false -
+  clearing the timer without re-arming it, and the dialog never hid. The timer
+  now lives in its own effect keyed only on the shown event's seq.
+  Also: StrictMode's double mount means a shared "closed" ref is reset by the
+  second mount before the first socket's onclose fires. useVoiceEvents scopes
+  that flag to the effect run instead.
+```
+
+## response phrasing
+
+```yaml
+added: 2026-10-08 (USER SPEC). SUPERSEDES part of the 2026-10-04 decision
+       "backend composes the speech string" - see the decisions table.
+
+what changed: the backend still decides WHAT IS TRUE and still composes a
+  canonical sentence. The SLM may now re-word that sentence so the assistant
+  does not say the same thing the same way forever. It is never told to work
+  out a fact; it is handed one.
+
+why the original rule still holds: a 1.5B model will state that a service is
+  running without having looked. It still would. It is simply no longer the
+  thing that looked.
+
+the contract (backend/intents.py Answer -> POST /voice/intent):
+  speech        canonical sentence, ALWAYS safe to say verbatim
+  facts         structured truth, handed to the phrasing prompt
+  must_include  substrings a rewrite MUST keep (down service names, the digits
+                of the time). Case-insensitive substring match.
+  forbid        substrings a rewrite must NOT contain. WORD-BOUNDARY matched,
+                so forbidding "voice" does not reject "invoice".
+  require_any   at least one must appear. This is what carries POLARITY:
+                must_include=["voice"] is satisfied just as well by "voice is
+                up and running", so a down-service answer also has to contain
+                a word that means down.
+  phrasable     false for lines spoken when something is already broken
+
+validation lives in voice/phrasing.py and REJECTS rather than corrects. A
+  rejected rewrite costs naturalness, never accuracy - the canonical sentence
+  is spoken instead and the reason is logged at INFO.
+
+polarity rules, concretely:
+  all healthy  -> forbid EVERY service name. Naming a service when nothing is
+                  wrong is the exact shape a hallucinated outage takes, and
+                  "all clear" / "no issues" / "nothing is down" all still pass.
+  something down -> require every down name, require a word from
+                  intents._DOWN_MARKERS, AND forbid the healthy names.
+                  THE TRADE: this loses the genuinely good "backend's fine,
+                  but voice is down". Accepted deliberately - the one failure
+                  this must not have is naming the wrong service as broken.
+
+scope (VOICE_PHRASE_SCOPE, default "slow", USER CHOICE):
+  off   never phrase
+  slow  only answers the SLM already classified. Fast-path hits stay canned.
+  all   everything phrasable; adds ~2-4s to a fast-path hit
+  KNOWN WRINKLE, flagged to the user 2026-10-08: the fast path exists to catch
+  the COMMON phrasings, so "slow" means the answers heard most often are the
+  canned ones and the persona is only heard on unusual wordings. The knob
+  exists so this can be flipped after hearing it on real hardware.
+
+persona: dry, composed, economical, lightly wry - "Jarvis / Friday" (USER).
+  Addresses the user as VOICE_PERSONA_ADDRESS (default "sir") about one reply
+  in three; empty string removes the rule entirely.
+
+model instance: ResponsePhraser takes the CLASSIFIER'S Llama. Do not load a
+  second one - it is another ~1.2GB resident next to Chromium, and the stages
+  are sequential so they can never contend. The two use different system
+  prompts, so the KV cache is cold on every switch; the phrasing prompt is
+  kept short for that reason.
+
+sampling: temperature 0.8 and NO grammar, unlike classification's 0.0 +
+  GBNF. Variation is the feature. A grammar could constrain shape but not
+  meaning, which is what actually needs guarding - hence the validator.
+
+hardcoded, never phrased (USER DECISION): the unknown intent, every backend
+  and API error line, and the mic/STT failures. All are spoken exactly when
+  something is already broken, and the first two have no facts to ground a
+  rewrite in anyway.
+```
+
+## testing
+
+```yaml
+status: THERE ARE NO AUTOMATED TESTS, BY DECISION (USER, 2026-10-08).
+deleted: apps/backend/tests/, apps/voice/tests/, and both conftest.py files.
+
+RULE FOR AGENTS: do not add a test file, a test directory, a test dependency,
+  or CI to this repo unless the user explicitly asks for it. Adding tests
+  "while you are in there" is the thing that was removed.
+
+rationale: one operator, one panel, one Pi. The suites were larger than the
+  code they guarded, and every behaviour they covered is reachable by hand in
+  under a minute against a running backend.
+
+HOW TO VERIFY INSTEAD - all of it works without audio hardware or models:
+
+  compile check (cheap, catches the import-root mistakes this repo invites):
+    python -m py_compile apps/backend/*.py apps/backend/routes/*.py \
+                         apps/voice/voice_assistant/*.py
+
+  ui:
+    cd apps/ui && npm run build        # tsc -b strict + vite build
+    grep -r "X-API-Key" dist/          # MUST find nothing
+
+  backend, live:
+    API_KEY=dev uvicorn main:app --port 8000     # from apps/backend
+    curl -i http://127.0.0.1:8000/services                    # expect 401
+    curl -H "X-API-Key: dev" http://127.0.0.1:8000/services
+    curl -H "X-API-Key: dev" http://127.0.0.1:8000/voice/intents
+
+  health transitions, without the pipeline:
+    SERVICE_STALE_AFTER_S=3 uvicorn main:app --port 8000
+    curl -X POST -H "X-API-Key: dev" .../voice/heartbeat   # -> Everything good.
+    (wait 3s)                                              # -> voice is down.
+
+  the re-wording contract (no model needed):
+    curl -s -H "X-API-Key: dev" -H 'Content-Type: application/json' \\
+      -d '{"intent":"system_health"}' -X POST .../voice/intent
+    # facts/must_include/forbid/require_any must match the real health, and
+    # must_include MUST name every down service
+
+  voice pill and answer dialog, without the pipeline:
+    for s in listening thinking speaking ready; do
+      curl -s -H "X-API-Key: dev" -H 'Content-Type: application/json' \
+        -d "{\"state\":\"$s\",\"speech\":\"Everything good.\"}" \
+        -X POST http://127.0.0.1:8000/voice/state; sleep 1
+    done
+
+  the dashboard end to end:
+    cd apps/ui && VITE_DEV_API_URL=http://127.0.0.1:8000 \
+      VITE_DEV_API_KEY=dev npm run dev
+    then drive it with the curl loop above and watch the pill.
+
+  what to re-check after touching the event path specifically:
+    - reload the page while the retained state is `speaking`: the pill must
+      repaint red and the dialog must NOT replay
+    - kill the backend: pill dims, keeps its colour; restart: it reconnects
+    - leave it idle 20s+: the socket must survive (keepalive)
 ```
 
 ## conventions
@@ -422,6 +675,13 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `VOICE_SLM_ENABLED` | no | voice `pipeline.py` | default true; false saves ~1.2GB RSS |
 | `VOICE_VERBOSE` | no | voice `config.py` | DEBUG logs with per-stage timings |
 | `VOICE_HEARTBEAT_INTERVAL_S` | no | voice `heartbeat.py` | default 15.0; 0 disables |
+| `VOICE_STATE_EVENTS` | no | voice `activity.py` | default true; false stops publishing and the pill reads "unknown" |
+| `VOICE_STATE_EVENT_TIMEOUT_S` | no | voice `api_client.py` | default 1.0; deliberately shorter than `VOICE_API_TIMEOUT_S` |
+| `VOICE_PHRASE_SCOPE` | no | voice `config.py` | `off`\|`slow`\|`all`; default `slow`. Which answers the SLM re-words |
+| `VOICE_PHRASE_TEMPERATURE` | no | voice `phrasing.py` | default 0.8; variation is the point |
+| `VOICE_PHRASE_MAX_TOKENS` | no | voice `phrasing.py` | default 48; one short spoken sentence |
+| `VOICE_PERSONA_ADDRESS` | no | voice `phrasing.py` | default `sir`; empty string removes the address rule |
+| `VOICE_STATE_REPEAT_S` | no | voice `activity.py` | default = `VOICE_HEARTBEAT_INTERVAL_S`; re-sends the current state so the pill survives a backend restart. 0 disables |
 | `SERVICE_STALE_AFTER_S` | no | backend `services.py` | default 45.0; must stay a multiple of the send interval |
 | `BACKEND_VERBOSE` | no | backend `main.py` | DEBUG logs |
 | `BACKEND_ORIGIN` | no | ui nginx template | default `http://127.0.0.1:8000` |
@@ -651,6 +911,22 @@ xterm_is_required:
 | 2026-10-04 | touch-first sizing, 56px floor | USER: touchscreen, targets bigger than mouse/keyboard |
 | 2026-10-04 | fluid clamp() type + auto-fit grid | USER has not measured the panel yet; avoids committing to a breakpoint |
 | 2026-10-04 | heartbeat trail is client-side, labelled "since load" | the backend reports current state only; implying persisted uptime would be a lie |
+| 2026-10-08 | voice activity over **WebSocket**, not MQTT | USER left the choice open. Publisher and subscriber already both speak HTTP to the backend, so this is one endpoint on the existing port behind the existing nginx. MQTT would add a broker to supervise, retained/QoS semantics and paho in two more images for the same ~1ms. The one MQTT feature that was needed - a retained message - is four lines in events.py |
+| 2026-10-08 | activity events are separate from the heartbeat | different questions on different timescales: "is it alive" (45s window, polled) vs "what is it doing now" (must be pushed within a frame). Merging them would make the pill as slow as the poll |
+| 2026-10-08 | no word-by-word streaming transcript | USER DECISION after being shown the cost: partials need Whisper re-run on a growing buffer every ~0.7s, and tiny.en rewrites itself visibly on short audio. The final transcript is pushed the moment STT returns, before classification |
+| 2026-10-08 | dialog shows the response only | USER DECISION. The transcript lives next to the pill instead, where it is useful while thinking rather than after the answer |
+| 2026-10-08 | dialog holds 7s but never cuts off speech | USER spec was 7s; hiding an answer still being read aloud would be worse, so the hold and the speaking state both have to end |
+| 2026-10-08 | state events published off-thread | `listening` is published before recording starts; a blocking POST would sit between the wake word and the open microphone |
+| 2026-10-08 | identical republishes refresh rather than re-event | the reporter re-sends state on a timer so the pill survives a backend restart; bumping seq for those would re-announce a months-old answer every 15s |
+| 2026-10-08 | the UI ignores the retained event for the dialog, not the pill | the pill wants the replayed state; the dialog replaying it meant every kiosk reload popped up the last answer |
+| 2026-10-08 | pill falls back to the heartbeat when voice is down | the event stream only reports what a live pipeline says; a pipeline that died mid-utterance would leave the pill green forever |
+| 2026-10-08 | the SLM may RE-WORD the backend's answer | USER: wants variation, accepts the latency. PARTIALLY SUPERSEDES the 2026-10-04 "backend composes the speech string" row — the backend still decides what is true and still composes the canonical sentence; the model only chooses how to say it |
+| 2026-10-08 | rewrites are VALIDATED against a backend-supplied contract, and rejected | the 2026-10-04 reasoning ("stops a small model inventing statuses") was right and is unchanged. Rejection beats correction: a discarded rewrite costs naturalness, a wrong one costs trust in the panel |
+| 2026-10-08 | polarity is enforced with require_any, not just must_include | requiring the word "voice" is satisfied by "voice is up and running". Caught before shipping, 2026-10-08 |
+| 2026-10-08 | down-case forbids healthy service names | loses "backend's fine, but voice is down"; the trade is deliberate, because naming the WRONG service as broken is the one failure that matters |
+| 2026-10-08 | phrasing reuses the classifier's Llama | a second instance is ~1.2GB resident next to Chromium, for stages that are sequential anyway |
+| 2026-10-08 | VOICE_PHRASE_SCOPE defaults to `slow` | USER CHOICE. Flagged at the time: the fast path catches the common phrasings, so this means the persona is heard least on the things asked most. Knob exists to flip it |
+| 2026-10-08 | ALL automated tests deleted; none to be added | USER DECISION: single-user project, one operator, and the suites were more code than the features they guarded. Verification is manual and live - see `## testing` |
 
 ## verified
 
@@ -658,12 +934,17 @@ xterm_is_required:
 date: 2026-10-04
 environment: macOS dev host, python 3.13 venv, no Pi hardware
 
+NOTE: the test suites referenced in this section were DELETED on 2026-10-08
+(USER DECISION, see `## decisions` and `## testing`). The runs below did
+happen and the behaviour they proved is still the behaviour in the code — but
+they are no longer repeatable. Re-verify by hand.
+
 passed:
-  - "pytest apps/voice/tests -q    -> 55 passed"
-      covers: fastpath hits/misses/pruning/filler, GBNF dash-last regression
-  - "pytest apps/backend/tests -q  -> 13 passed"
-      covers: never-seen=down, stale transition, recovery, 1/2/3-service
-              phrasing, partial outage, monotonic-clock requirement
+  - "[suite since deleted] apps/voice logic tests -> 55 passed"
+      covered: fastpath hits/misses/pruning/filler, GBNF dash-last regression
+  - "[suite since deleted] apps/backend logic tests -> 13 passed"
+      covered: never-seen=down, stale transition, recovery, 1/2/3-service
+               phrasing, partial outage, monotonic-clock requirement
   - "all modules py_compile clean (backend + voice)"
   - "bash -n scripts/fetch-voice-models.sh"
   - "docker compose config -> both services valid"
@@ -697,9 +978,74 @@ passed:
      yields 'proxy_set_header Host ;' (nginx would fail to boot); with the
      filter, $host/$uri survive. The filter IS set in the Dockerfile."
 
+date: 2026-10-08
+environment: macOS dev host, python 3.13 venv, Chromium via the in-app browser
+
+passed:
+  - "[suites since deleted, same day] backend 27 passed, voice 64 passed.
+     The event-hub and reporter behaviour they covered - retained event,
+     bounded queue, unknown-state downgrade, identical-republish dedupe,
+     non-blocking publish - was ALSO proven live below, which is why deleting
+     them lost no verification."
+  - "LIVE backend on :8777, real WebSocket client:
+      bad API key           -> closed 1008 'Invalid or missing API key'
+      no API key            -> closed 1008
+      publish before connect-> retained event delivered on connect
+      full utterance        -> listening/thinking/speaking/ready all pushed,
+                               0.8-1.2ms from POST to client receive
+      unknown state name    -> 200, delivered as 'unknown' (no 500)
+      two dashboards        -> identical seq to both; subscribers=2
+      disconnect            -> subscribers back to 0
+      idle socket           -> {'type':'ping'} at exactly 20.0s"
+  - "LIVE UI in Chromium against that backend, dev server, 1280x800 and
+     1024x600, both themes:
+      pill blue/green/amber/red on the real event stream
+      transcript shown beside the pill during thinking
+      dialog measured: appeared on the speaking event, hidden 7001ms later
+      10s 'speech' -> dialog still up at 10s, hidden the instant ready arrived
+      same answer twice -> dialog re-triggered, not swallowed
+      backend killed -> pill dims (data-stale), keeps its last colour
+      backend restarted -> reconnected by itself, subscribers=1
+      heartbeat stale (SERVICE_STALE_AFTER_S=3) -> pill 'Voice offline',
+        overriding the stale 'ready' event
+      reload while the retained state is 'speaking' -> pill repaints red, the
+        dialog does NOT replay; a genuinely new answer right after still shows
+      identical republish -> no new dialog, pill unchanged"
+  - "UI build clean, tsc strict passes; API key still absent from dist/"
+  - "RESPONSE PHRASING, live backend on :8777:
+      POST /voice/intent now returns facts + must_include + forbid +
+      require_any + phrasable, for both the healthy and the voice-down case,
+      and phrasable=false for unknown"
+  - "phrasing.validate() exercised against 31 hand-written rewrites covering
+     every rule: hallucinated outage REJECTED, wrong service REJECTED,
+     softened-to-fine REJECTED, inverted polarity ('voice is up and running')
+     REJECTED, wrong time REJECTED, dropped meridiem REJECTED, JSON leak and
+     rambling REJECTED; 'nothing is down' / 'no issues' / 'invoice' ACCEPTED
+     (word-boundary matching), quoted output unwrapped. All 31 as designed."
+  - "ResponsePhraser against a stub Llama: good rewrite used; hallucination,
+     wrong service, inverted polarity, model exception and rambling all fall
+     back to the canonical sentence; an answer with no facts never calls the
+     model at all; temperature 0.8, no grammar, facts present in the prompt,
+     address rule present and removable"
+
 NOT verified - no hardware available:
+  - the phrasing stage end to end. The validator and the fallback paths are
+    exercised above against a stub, but no sentence has ever been generated by
+    the real Qwen2.5-1.5B, so the REJECTION RATE is unknown. If the persona is
+    rarely heard, log-grep for "Rewrite rejected" before changing the prompt —
+    the reason is logged every time.
+  - pipeline.py's _phrase() scope gating (needs sounddevice + numpy, which the
+    dev host does not have). Four lines, reviewed by inspection only.
   - any audio path: mic capture, wake word, VAD, Whisper, Piper, playback
   - the SLM: model not downloaded, llama-cpp-python not installed
+  - the nginx `location = /api/voice/events` block. No nginx binary and no
+    Docker daemon on the dev host, so the WebSocket was proven through the
+    Vite dev proxy instead. The directives are standard (Upgrade/Connection +
+    a long proxy_read_timeout) but they are UNRUN.
+  - the activity reporter in situ against the real pipeline. Its threading and
+    queue behaviour were exercised by a suite that no longer exists; the
+    pipeline call sites were never covered either way, because they need audio
+    hardware
   - the heartbeat THREAD in situ (heartbeat.py). The endpoint and the
     staleness logic are both verified; the daemon thread that drives them has
     only been verified by inspection, because starting it requires the full
@@ -731,13 +1077,15 @@ next_up:
   - add fastpath rules for phrasings that show up as "Classified by SLM"
 
 unstarted:
-  - no UI tests (the logic worth testing is useTheme's boundary/RTC handling
-    and format.ts; neither needs a DOM)
-  - no backend route tests (services.py is covered; the routes are not)
+  - no automated tests anywhere, and none wanted (USER DECISION 2026-10-08).
+    Do not add a suite, a test file, or CI unless the user asks.
   - no CI
   - heartbeat history is not persisted, so the trail resets on reload. Real
     uptime history needs server-side storage.
-  - no MQTT / status bus (see `## mqtt` below)
+  - no word-by-word streaming transcript. Would need Whisper re-run on a
+    growing buffer during recording; declined 2026-10-08 (see `## decisions`).
+    If revisited, VOICE_STATE_EVENTS and the `thinking` transcript field are
+    already the delivery path - only stt.py and recorder.py would change.
   - voice has no barge-in: it cannot be interrupted mid-response
   - single static API key; no rotation, no per-client keys, no rate limiting
   - backend port 8000 and python version hardcoded, not env-driven
@@ -746,7 +1094,15 @@ unstarted:
 ## mqtt
 
 ```yaml
-status: NOT IMPLEMENTED, and deliberately deferred as of 2026-10-04
+status: NOT IMPLEMENTED, and still deliberately deferred. REVISITED
+        2026-10-08 when sub-second push WAS needed for the voice pill — one of
+        the revisit triggers below — and rejected again in favour of a
+        WebSocket on the existing backend. There is still exactly one
+        publisher (the voice pipeline) and one subscriber (the panel), both
+        already speaking HTTP to the backend, so a broker buys nothing a 60-
+        line hub did not. See `## voice activity`. The remaining triggers
+        (3+ publishers, off-box publishers, "it crashed at 3am" event history)
+        are all still unmet.
 context: user plans a status screen polling service health. Only `voice` is
          tracked today; more services are expected later.
 recommendation: wait. Build the screen against GET /services polling first.
@@ -757,7 +1113,8 @@ rationale:
   - MQTT adds a broker to supervise, retained-message and QoS semantics, and
     a second transport alongside HTTP, for no present gain
 revisit_when: any ONE of
-  - sub-second or push-driven UI updates are needed
+  - sub-second or push-driven UI updates are needed  # MET 2026-10-08, solved
+                                                     # with a WebSocket instead
   - 3+ independent publishers exist
   - something off-box needs to publish status
   - a service must emit events the API cannot synchronously answer for
@@ -780,13 +1137,15 @@ on_new_file_or_dir:        [## layout]
 on_dependency_change:      [## stack, the relevant requirements.txt]
 on_docker_change:          [## docker]
 on_architectural_choice:   [## decisions (append row, never rewrite history)]
-on_test_or_manual_verify:  [## verified]
+on_manual_verify:          [## verified]   # there is no test suite; see ## testing
 on_new_intent:             [## intent system, apps/backend/intents.py only]
 on_voice_pipeline_change:  [## voice pipeline]
 on_finishing_backlog_item: [## backlog (remove it), ## verified]
 on_discovering_a_defect:   [## backlog, or an OPEN ISSUE block in the owning section]
 
 rules:
+  - NEVER add tests, a test directory, a test dependency or CI unless the user
+    asks. Removed deliberately on 2026-10-08; see `## testing`
   - append to `## decisions`; do not delete or edit past rows
   - keep this file factual. no prose, no narration, no persuasion
   - state absolute dates, never "recently" or "last week"

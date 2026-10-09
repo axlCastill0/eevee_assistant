@@ -4,17 +4,29 @@ import { DetailSheet } from './components/DetailSheet'
 import { Overview } from './components/Overview'
 import { ServiceTile } from './components/ServiceTile'
 import { TopBar } from './components/TopBar'
+import { VoiceDialog } from './components/VoiceDialog'
 import { agoLabel } from './lib/format'
 import { useClock } from './lib/useClock'
 import { useServices } from './lib/useServices'
 import { useTheme } from './lib/useTheme'
+import { useVoiceEvents } from './lib/useVoiceEvents'
 
 export default function App() {
   const now = useClock()
   const { mode, resolved, clockSynced, choose } = useTheme()
   const { data, error, loading, updatedAt, latencyMs, failures, history } = useServices()
+  const voice = useVoiceEvents()
 
   const [openName, setOpenName] = useState<string | null>(null)
+
+  // The event stream only reports what the pipeline SAYS it is doing, so a
+  // pipeline that died mid-utterance would leave the pill stuck on green
+  // forever. Heartbeat staleness is the authority on whether it is alive at
+  // all, so a voice service the backend reports as down overrides the last
+  // event. Same reasoning as "never checked in counts as down".
+  const voiceDown =
+    data?.services.some((s) => s.name === 'voice' && !s.healthy) ?? false
+  const voiceState = voiceDown ? 'offline' : voice.state
 
   const open = useMemo(
     () => data?.services.find((s) => s.name === openName) ?? null,
@@ -36,6 +48,11 @@ export default function App() {
         latencyMs={latencyMs}
         failures={failures}
         loading={loading}
+        voice={{
+          state: voiceState,
+          transcript: voice.transcript,
+          connected: voice.connected,
+        }}
       />
 
       <main className="app__grid">
@@ -81,6 +98,17 @@ export default function App() {
           </>
         )}
       </footer>
+
+      {/* Raw event state, NOT voiceState: the offline override is driven by
+          heartbeat staleness, and an answer arriving is itself proof the
+          pipeline is alive. Using the override here would suppress exactly the
+          dialog the user is waiting on if a beat happened to be late. */}
+      <VoiceDialog
+        speech={voice.speech}
+        seq={voice.seq}
+        speaking={voice.state === 'speaking'}
+        retained={voice.retained}
+      />
 
       {open && (
         <DetailSheet

@@ -1,0 +1,121 @@
+/* The spoken answer, sized to be read from across the room.
+ *
+ * Positioned over the grid rather than inside it: it is transient, it must not
+ * reflow the dashboard when it appears, and on a 10" panel the centre is the
+ * only place guaranteed to be in view.
+ *
+ * PI PERFORMANCE: entrance is transform + opacity only. No backdrop-filter —
+ * a blurred full-screen scrim is the single most expensive thing this GPU
+ * could be asked to do. A flat semi-opaque scrim costs one fill.
+ */
+
+.voicedialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* above the detail sheet's scrim */
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  /* Dimming the dashboard is what makes the big text readable at a distance;
+     at 10" the panel is otherwise bright enough to compete with it. Literal
+     rgba, matching .sheet__scrim: a scrim is a fixed overlay rather than a
+     themed surface, which is why these are the only non-token colours here. */
+  background: rgba(0, 0, 0, 0.62);
+  /* The dialog is informational and nothing behind it needs tapping while it
+     is up, but blocking touches for 7s would feel broken. */
+  pointer-events: none;
+  animation: fade-in var(--dur) var(--ease);
+}
+
+:root[data-theme='light'] .voicedialog {
+  background: rgba(16, 24, 40, 0.42);
+}
+
+.voicedialog__card {
+  width: min(100%, 60rem);
+  padding: var(--space-7) var(--space-6);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  text-align: center;
+  animation: voicedialog-in var(--dur-slow) var(--ease-out);
+}
+
+.voicedialog__text {
+  margin: 0;
+  /* The requirement is "big font so I can see it from afar", so this is the
+     largest type on the panel — a step above the clock. Still clamp(), because
+     the panel resolution is not measured yet. */
+  font-size: clamp(2rem, 4.5vw + 0.8rem, 4rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  /* Answers are one or two sentences composed by the backend, so their length
+     is known to be short; balanced wrapping reads better than a ragged last
+     line at this size. */
+  text-wrap: balance;
+}
+
+/* ---- hold indicator ----------------------------------------------------- */
+
+.voicedialog__bar {
+  margin: var(--space-6) auto 0;
+  width: min(100%, 24rem);
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.voicedialog__bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left center;
+  /* 7s, matching HOLD_MS in VoiceDialog.tsx. These two numbers have to agree;
+     if the hold changes, change both. */
+  animation: voicedialog-drain 7s linear forwards;
+}
+
+@keyframes voicedialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes voicedialog-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* The bar keeps draining under reduced motion: it is information, not
+   decoration. Only the entrance is dropped. */
+@media (prefers-reduced-motion: reduce) {
+  .voicedialog,
+  .voicedialog__card {
+    animation: none;
+  }
+}
+
+@media (max-height: 700px) {
+  .voicedialog__card {
+    padding: var(--space-6) var(--space-5);
+  }
+
+  .voicedialog__bar {
+    margin-top: var(--space-5);
+  }
+}

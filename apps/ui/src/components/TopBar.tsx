@@ -1,7 +1,9 @@
 import { clockTime, longDate } from '../lib/format'
 import type { ThemeMode } from '../lib/useTheme'
+import type { VoiceState } from '../lib/useVoiceEvents'
 import { PollRing } from './PollRing'
 import { ThemeToggle } from './ThemeToggle'
+import { VoicePill } from './VoicePill'
 import './TopBar.css'
 
 export function TopBar({
@@ -13,6 +15,7 @@ export function TopBar({
   latencyMs,
   failures,
   loading,
+  voice,
 }: {
   now: Date
   mode: ThemeMode
@@ -22,6 +25,7 @@ export function TopBar({
   latencyMs: number | null
   failures: number
   loading: boolean
+  voice: { state: VoiceState; transcript: string | null; connected: boolean }
 }) {
   const { hm, seconds, meridiem } = clockTime(now)
 
@@ -41,6 +45,14 @@ export function TopBar({
       </div>
 
       <div className="topbar__right">
+        {/* First in the row on purpose: it is the only element here that
+            changes on a human timescale and needs to be found instantly. */}
+        <VoicePill
+          state={voice.state}
+          transcript={voice.transcript}
+          connected={voice.connected}
+        />
+
         {/* Connection readout. Latency in monospace is the small detail that
             makes this feel like a dev tool rather than a consumer widget. */}
         <div className="topbar__conn">

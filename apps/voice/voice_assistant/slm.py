@@ -4,9 +4,12 @@ Output is constrained by a GBNF grammar built from the API's intent catalogue,
 which makes an invalid intent name literally impossible to generate. Without
 the grammar, Qwen invents plausible-sounding intents that no handler exists for.
 
-The model returns structured data only. Spoken responses are composed by the
-backend, never here — a small model will happily state a service is running
-without having looked.
+This module returns structured data only. It never decides what is true: a
+small model will happily state a service is running without having looked.
+
+Re-wording the backend's answer into something that does not sound canned is a
+SEPARATE stage, in phrasing.py, which shares this model but is given the facts
+and is validated against them.
 """
 from __future__ import annotations
 

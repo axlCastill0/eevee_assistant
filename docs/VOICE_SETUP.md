@@ -114,12 +114,6 @@ Then say: **"hey jarvis"** → *"is everything ok"*.
 Expected: *"Everything good."* If the voice container has not been running for
 45 s, or stops, the answer becomes *"voice is down."* — see §9.1.
 
-Logic tests, no hardware or models needed:
-
-```bash
-python -m pytest apps/voice/tests -q
-```
-
 ---
 
 ## 9. Architecture
@@ -153,6 +147,38 @@ python -m pytest apps/voice/tests -q
                              │
                              v
                      Piper TTS -> speaker
+```
+
+### 9.0 Activity is pushed to the dashboard
+
+Every stage transition above is also POSTed to `/voice/state`, and the backend
+fans it out over a WebSocket to the panel, which shows it as a coloured pill:
+blue ready, green listening, amber thinking, red speaking. That is how you know
+to start talking after the wake word fires, and the answer appears on screen in
+large type for 7 seconds.
+
+Two details worth knowing before changing anything here:
+
+- **It is published off the pipeline thread** (`voice_assistant/activity.py`).
+  `listening` has to be sent *before* recording begins, so a synchronous POST
+  would put an HTTP round trip — and with a dead backend a full connect
+  timeout — between the wake word and the microphone opening. Events are
+  queued and the queue drops the oldest when full.
+- **It is not the heartbeat.** The heartbeat answers "is this alive" on a 45 s
+  window; these events answer "what is it doing right now" and have to arrive
+  in milliseconds. Measured at 0.8–1.2 ms from POST to the browser.
+
+Set `VOICE_STATE_EVENTS=false` to stop publishing. The pipeline is unaffected;
+the pill just reads "unknown".
+
+Drive the dashboard with no audio hardware:
+
+```bash
+for s in listening thinking speaking ready; do
+  curl -s -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+    -d "{\"state\":\"$s\",\"speech\":\"Everything good.\"}" \
+    -X POST http://127.0.0.1:8000/voice/state; sleep 1
+done
 ```
 
 ### 9.1 Health is inferred from heartbeats
@@ -201,12 +227,34 @@ The requirement is that the API survives a broken pipeline. That means separate
 containers, which means separate processes, which leaves HTTP. The two share
 the host's loopback via `network_mode: host`, so the call is cheap.
 
-### Why the backend composes the speech
+### How the answer is worded
 
-The backend owns the data, so it owns the sentence. The pipeline only decides
-*what was asked*. This also keeps the response wording changeable without
-touching the voice container, and keeps a 1.5B model from inventing statuses it
-never looked up.
+The backend decides what is true and composes a canonical sentence. The SLM
+then gets one more call: here are the facts, here is the plain sentence, say it
+in your own voice. The result is **validated before it is spoken** — it must
+keep the load-bearing words (a down service's name, the digits of the time),
+must not name a service that is healthy, and must actually sound like bad news
+when the news is bad. Anything that fails is thrown away and the plain sentence
+is spoken instead, with the reason logged at INFO as `Rewrite rejected`.
+
+So the model chooses the words; it never chooses the facts. That is the whole
+reason this is safe — see `phrasing.py`.
+
+`VOICE_PHRASE_SCOPE` controls who pays for it: `slow` (default) phrases only
+the answers that already went through the SLM to classify, so regex fast-path
+hits stay instant. `all` phrases everything and adds roughly 2–4 s to those
+hits. `off` restores the pre-2026-10-08 behaviour. Note that the fast path is
+there to catch your *common* phrasings, so on `slow` you will hear the plain
+sentences most often.
+
+### Why the backend still composes the canonical sentence
+
+The backend owns the data, so it owns the claim. The pipeline only decides
+*what was asked*, and since 2026-10-08, *how to say it*. Keeping the canonical
+sentence server-side means the wording can change without touching the voice
+container, and — the original reason — it keeps a 1.5B model from inventing
+statuses it never looked up. The phrasing stage above does not weaken that: the
+model is handed the answer, never asked for it.
 
 ### Why intents are fetched from the API
 
@@ -273,14 +321,17 @@ Carried over from the prototype, all learned the hard way:
    mid-inference. `downsample_mic()` returns a contiguous copy.
 
 4. **GBNF rejects `\-` in a character class** and llama.cpp *segfaults* rather
-   than reporting the error. `-` must be last: `[a-zA-Z0-9 _-]`. Guarded by
-   `tests/test_grammar.py`.
+   than reporting the error. `-` must be last: `[a-zA-Z0-9 _-]`. The grammar is
+   built at runtime in `slm.py`; if you touch that builder, check this first —
+   a segfault is all the feedback you get.
 
 5. **Whisper hallucinates on silence** — 8 s of room noise becomes "this." or
    "thank you." STT is skipped entirely unless the recorder's VAD saw speech.
 
-6. **Never let the model compose responses.** A small model states inventory
-   and statuses it never looked up. It returns structured data only.
+6. **Never let the model decide what is true.** A small model states inventory
+   and statuses it never looked up. It classifies, and it re-words answers it
+   was handed — and every rewrite is validated against the backend's facts
+   before being spoken. It never originates one.
 
 7. **USB mics usually refuse 16 kHz** via PortAudio. Capture at 48 kHz and
    decimate by 3. Naive decimation is fine for speech-band content.

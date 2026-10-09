@@ -124,7 +124,7 @@ would leave the dashboard in a fallback face.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  8:41 ³⁷ PM      [live 9ms]  [Light|Dark|Auto]       │  TopBar
+│  8:41 ³⁷ PM   (● Ready) [live 9ms] [Light|Dark|Auto] │  TopBar
 │  Sunday, October 4                                    │
 ├──────────────────────────────────────────────────────┤
 │ ▌ SYSTEM                                             │  Overview
@@ -153,6 +153,47 @@ Tiles show:
 - **Pressure bar** along the bottom, filling as the last heartbeat ages toward
   `stale_after_s`. Past 60% the dot and bar turn amber — you see a service
   drifting before it is marked down.
+
+### Voice pill and answer dialog
+
+The pill on the top bar is the one element here that is **not** polled. It is
+pushed over a WebSocket (`/api/voice/events`) because its job is to tell you
+the microphone is open so you can start talking — a 3s poll would show that an
+average of 1.5s late, which is after you have already spoken.
+
+| colour | state | meaning |
+|---|---|---|
+| blue | `ready` | wake word armed |
+| green | `listening` | mic open, talk now (dot pulses) |
+| amber | `thinking` | transcribing and classifying (slower pulse) |
+| red | `speaking` | the assistant has the floor |
+| grey | `offline` / `unknown` | not running, or nothing heard from it yet |
+
+Red is not an error. It is the one colour on this panel that means "do not
+talk over this".
+
+While thinking, the transcript appears beside the pill. It is the **final**
+transcript, pushed the moment Whisper returns and before classification —
+which on an SLM fallback is another 4-5s — so a misheard command is visible
+early. There is no word-by-word streaming; see the decision table in
+AGENT_CONTEXT.md.
+
+The answer appears centre-screen in the largest type on the panel and holds for
+7 seconds. If the sentence takes longer than that to speak, the dialog stays
+until speech ends — hiding an answer still being read aloud would be worse than
+holding it a little longer.
+
+A reload repaints the pill from the hub's retained event but does **not**
+replay the answer — the dialog ignores the first message of each connection,
+which is the replayed one. The pipeline also re-sends its current state every
+15s so the pill recovers by itself after a backend restart; the backend treats
+an identical republish as a refresh rather than a new event, so those never
+re-open the dialog.
+
+The pill falls back to the heartbeat: a pipeline that died mid-utterance cannot
+publish `ready`, so a voice service the backend reports as down overrides the
+last event. The dialog deliberately does not do this — an answer arriving is
+itself proof the pipeline is alive.
 
 Tap a tile for the detail sheet: last heartbeat, stale threshold, uptime since
 load, sample count, and a longer trail.
@@ -187,12 +228,24 @@ curl -H "X-API-Key: $API_KEY" -X POST http://127.0.0.1:8000/voice/heartbeat
 
 # watch it go stale (default 45s), or shorten the window
 SERVICE_STALE_AFTER_S=5 uvicorn main:app --port 8000
+
+# drive the voice pill and the answer dialog without any audio hardware
+for s in listening thinking speaking ready; do
+  curl -s -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+    -d "{\"state\":\"$s\",\"speech\":\"Everything good.\"}" \
+    -X POST http://127.0.0.1:8000/voice/state; sleep 1
+done
 ```
 
 ```bash
-npm run build       # -> dist/
+npm run build       # -> dist/   (runs tsc -b strict first)
 npm run typecheck
 ```
+
+There is **no test suite** in this project, by decision — see `## testing` in
+AGENT_CONTEXT.md. `npm run build` plus the curl commands above are the check.
+One more worth doing after touching the event path: `grep -r "X-API-Key" dist/`
+must find nothing.
 
 ---
 
@@ -248,7 +301,20 @@ unclutter -idle 0 &    # belt and braces; the CSS already hides the cursor
    `index.html` painting the background before the CSS bundle loads. If you
    change `--bg`, change that inline rule and the `theme-color` meta too.
 
-4. **The trail resets on reload.** It is client-side only. If you want real
+4. **The Vite dev proxy does not inject headers on WebSocket upgrades.** Its
+   `proxyReq` event fires for HTTP only; upgrades need a separate `proxyReqWs`
+   handler. Without it the voice socket reaches the backend with no API key and
+   is closed with 1008, which Chromium reports only as "WebSocket is closed
+   before the connection is established". Both handlers are in
+   `vite.config.ts`. nginx has no such split.
+
+5. **The event socket has its own nginx location.** `/api/` sets
+   `proxy_read_timeout 5s`, which is right for a 3s poll and fatal for a socket
+   that sits idle between utterances. `location = /api/voice/events` gets
+   3600s plus the `Upgrade`/`Connection` headers. The backend also sends a
+   keepalive frame every 20s.
+
+6. **The trail resets on reload.** It is client-side only. If you want real
    uptime history it has to be persisted server-side — see the backlog note in
    AGENT_CONTEXT.md.
 
@@ -268,6 +334,13 @@ On a macOS dev host, against the real backend, at 1280x800 and 1024x600:
 - all three theme modes; auto correctly resolved to dark at 8:41 PM; choice
   persisted across reload
 - detail sheet open and dismiss
+- voice pill driven by the real event stream through all four colours
+- transcript beside the pill while thinking
+- answer dialog measured at 7001ms; a 10s "utterance" held it until speech
+  ended; the same answer twice re-triggered it
+- backend killed → pill dims and keeps its last colour; restarted → the socket
+  reconnected by itself
+- heartbeat gone stale → pill reads "Voice offline", overriding the last event
 - production bundle served through an nginx-equivalent proxy
 - API key absent from every served file
 - no console errors

@@ -29,6 +29,35 @@ server {
     gzip_types text/css application/javascript application/json image/svg+xml;
     gzip_min_length 1024;
 
+    # ---- voice event socket ------------------------------------------------
+    # Declared BEFORE /api/ because nginx picks the longest matching prefix,
+    # and this needs settings the polling proxy must not have.
+    #
+    # WHY ITS OWN LOCATION:
+    #   /api/ sets proxy_read_timeout 5s, which is right for a 3s poll and
+    #   fatal for a socket that is idle between utterances — nginx would close
+    #   it every 5 seconds and the dashboard would reconnect forever. This
+    #   location gets an hour instead, and the backend sends a keepalive frame
+    #   every 20s (PING_INTERVAL_S) so a genuinely dead peer is still noticed.
+    location = /api/voice/events {
+        proxy_pass ${BACKEND_ORIGIN}/voice/events;
+
+        # Same injection as the REST proxy: the key is attached to the upgrade
+        # request server-side, so the browser still never holds it.
+        proxy_set_header X-API-Key "${API_KEY}";
+
+        # The three lines that make an upgrade work. Without Connection:
+        # upgrade nginx buffers the response and the handshake never completes.
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
     # ---- API proxy ---------------------------------------------------------
     location /api/ {
         # Trailing slash on both sides strips the /api prefix:
