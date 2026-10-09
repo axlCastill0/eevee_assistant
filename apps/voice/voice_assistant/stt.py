@@ -13,17 +13,33 @@ log = logging.getLogger("stt")
 def load_whisper() -> WhisperModel:
     """Construct a WhisperModel ready for transcription.
 
-    The model files are baked into the image, so this does not hit the network.
-    A cold load is ~0.55 s warm on a Pi 5.
+    The model files are baked into the image, and by default this is FORBIDDEN
+    from touching the network — see config.WHISPER_LOCAL_ONLY for why that is
+    not merely an optimisation. A cold load is ~0.55 s warm on a Pi 5.
     """
     t0 = time.monotonic()
-    model = WhisperModel(
-        config.WHISPER_SIZE,
-        device="cpu",
-        compute_type=config.WHISPER_COMPUTE_TYPE,
-        cpu_threads=config.WHISPER_THREADS,
-        local_files_only=False,   # allow a first-run download if not baked in
-    )
+    try:
+        model = WhisperModel(
+            config.WHISPER_SIZE,
+            device="cpu",
+            compute_type=config.WHISPER_COMPUTE_TYPE,
+            cpu_threads=config.WHISPER_THREADS,
+            local_files_only=config.WHISPER_LOCAL_ONLY,
+        )
+    except Exception as exc:
+        # The stack trace from huggingface_hub is long and points at HTTP
+        # plumbing, which sends you looking at the network when the real
+        # question is whether the weights are in the image. Say that plainly;
+        # this is a startup failure the operator has to act on.
+        if config.WHISPER_LOCAL_ONLY:
+            log.error(
+                "Whisper %r not found in the local cache (%s). The image bakes "
+                "it in at build time, so this usually means the image is stale "
+                "or VOICE_WHISPER_SIZE was changed. Rebuild the voice image, or "
+                "set VOICE_WHISPER_ALLOW_DOWNLOAD=true to fetch it once.",
+                config.WHISPER_SIZE, exc,
+            )
+        raise
     log.info("Whisper %s loaded in %.2fs (%d threads)",
              config.WHISPER_SIZE, time.monotonic() - t0, config.WHISPER_THREADS)
     return model

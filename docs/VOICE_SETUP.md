@@ -325,24 +325,34 @@ Carried over from the prototype, all learned the hard way:
    built at runtime in `slm.py`; if you touch that builder, check this first —
    a segfault is all the feedback you get.
 
-5. **Whisper hallucinates on silence** — 8 s of room noise becomes "this." or
+5. **Whisper must never be allowed to phone home.** The weights are baked into
+   the image, but faster-whisper will still call HuggingFace to *revalidate* a
+   complete cache unless `local_files_only=True`. On a Pi that has just
+   rebooted the connection gets made and then dropped, and the resulting
+   `RemoteProtocolError` is not one of the exceptions huggingface_hub falls
+   back to the cache on — so the container dies at startup with a stack trace
+   that looks like a network problem. `VOICE_WHISPER_ALLOW_DOWNLOAD=false` is
+   the default for this reason. A *refused* port is handled gracefully, which
+   is why this only ever appears on a real boot.
+
+6. **Whisper hallucinates on silence** — 8 s of room noise becomes "this." or
    "thank you." STT is skipped entirely unless the recorder's VAD saw speech.
 
-6. **Never let the model decide what is true.** A small model states inventory
+7. **Never let the model decide what is true.** A small model states inventory
    and statuses it never looked up. It classifies, and it re-words answers it
    was handed — and every rewrite is validated against the backend's facts
    before being spoken. It never originates one.
 
-7. **USB mics usually refuse 16 kHz** via PortAudio. Capture at 48 kHz and
+8. **USB mics usually refuse 16 kHz** via PortAudio. Capture at 48 kHz and
    decimate by 3. Naive decimation is fine for speech-band content.
 
-8. **`/dev/snd` needs a matching group.** The container runs as a non-root
+9. **`/dev/snd` needs a matching group.** The container runs as a non-root
    user in group `AUDIO_GID`. Wrong GID means a permission error on the mic.
 
-9. **`docker compose exec voice` device indexes differ from the host's.** Match
-   by name instead.
+10. **`docker compose exec voice` device indexes differ from the host's.** Match
+    by name instead.
 
-10. **Verify a dependency pin before committing it.** `piper-onnx` was pinned
+11. **Verify a dependency pin before committing it.** `piper-onnx` was pinned
     `~=0.1` on the assumption it followed a 0.x line; it never published one,
     so the pin resolved to nothing and the failure only surfaced minutes into
     a Pi build. Check against the real index and the real target platform:

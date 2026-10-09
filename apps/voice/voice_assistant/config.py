@@ -120,6 +120,21 @@ WHISPER_SIZE = _str("VOICE_WHISPER_SIZE", "tiny.en")
 WHISPER_COMPUTE_TYPE = _str("VOICE_WHISPER_COMPUTE", "int8")
 WHISPER_BEAM_SIZE = _int("VOICE_WHISPER_BEAM", 1)
 
+# Load Whisper from the baked-in cache ONLY, never from the network.
+#
+# This defaults to True because the Dockerfile bakes tiny.en into
+# /opt/models-cache at build time. With it False, faster-whisper calls
+# huggingface_hub.snapshot_download even when the cache is complete — the call
+# contacts HF to revalidate, and a Pi that has just rebooted will happily
+# connect and then have the connection cut, which raises RemoteProtocolError.
+# huggingface_hub only falls back to the cache on connection/timeout errors, so
+# that one escapes and kills the pipeline at startup. Seen on the real Pi
+# 2026-10-08.
+#
+# Set VOICE_WHISPER_ALLOW_DOWNLOAD=true for a bare-metal first run, or when
+# changing VOICE_WHISPER_SIZE to something the image does not carry.
+WHISPER_LOCAL_ONLY = not _bool("VOICE_WHISPER_ALLOW_DOWNLOAD", False)
+
 # Qwen2.5-1.5B Q5_K_M: chosen for classification quality over latency.
 # Budget on a Pi 5 is roughly 4-5 s per classification (the 0.5B/Q4 was
 # 1.3-1.7 s) and ~1.1 GB resident. The fast path below is what keeps typical

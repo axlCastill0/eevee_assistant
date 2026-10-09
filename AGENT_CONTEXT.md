@@ -282,6 +282,28 @@ fastpath:
          never emit an intent with no handler
   extending: check logs for "Classified by SLM" - each is a missing rule
 
+BOOT GOTCHA - WHISPER MUST NOT TOUCH THE NETWORK (fixed 2026-10-08):
+  symptom: after a Pi reboot the voice container exits with
+           `httpx.RemoteProtocolError: Server disconnected without sending a
+           response` from inside load_whisper -> huggingface_hub.
+  cause:   stt.py passed `local_files_only=False`. faster-whisper then calls
+           snapshot_download EVEN WHEN THE CACHE IS COMPLETE, to revalidate
+           against HF. On a Pi that just booted, the connection is made and
+           then dropped. huggingface_hub falls back to the cache on
+           ConnectionError and Timeout, but RemoteProtocolError is NEITHER, so
+           it escapes and kills startup. A REFUSED port is handled fine - which
+           is why this only shows up on a real boot, never on a dev box with no
+           network.
+  fix:     config.WHISPER_LOCAL_ONLY, default True. The weights are baked into
+           the image at /opt/models-cache, so there is nothing to fetch.
+           VOICE_WHISPER_ALLOW_DOWNLOAD=true re-enables fetching for a
+           bare-metal first run or a changed VOICE_WHISPER_SIZE.
+  REPRODUCED AND FIXED under a TCP server that accepts then hangs up; see
+  `## verified`.
+  restart policy note: voice is `unless-stopped`, so this exits once and STAYS
+  down rather than restart-looping. That is the intended behaviour for a
+  missing model, and it is why the container was simply gone after the reboot.
+
 latency:
   fastpath_hit: ~2s end-to-end
   slm_fallback: ~6-7s end-to-end
@@ -677,6 +699,7 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `VOICE_HEARTBEAT_INTERVAL_S` | no | voice `heartbeat.py` | default 15.0; 0 disables |
 | `VOICE_STATE_EVENTS` | no | voice `activity.py` | default true; false stops publishing and the pill reads "unknown" |
 | `VOICE_STATE_EVENT_TIMEOUT_S` | no | voice `api_client.py` | default 1.0; deliberately shorter than `VOICE_API_TIMEOUT_S` |
+| `VOICE_WHISPER_ALLOW_DOWNLOAD` | no | voice `config.py` | default false. True lets Whisper fetch from HuggingFace; see the boot gotcha below |
 | `VOICE_PHRASE_SCOPE` | no | voice `config.py` | `off`\|`slow`\|`all`; default `slow`. Which answers the SLM re-words |
 | `VOICE_PHRASE_TEMPERATURE` | no | voice `phrasing.py` | default 0.8; variation is the point |
 | `VOICE_PHRASE_MAX_TOKENS` | no | voice `phrasing.py` | default 48; one short spoken sentence |
@@ -920,6 +943,7 @@ xterm_is_required:
 | 2026-10-08 | identical republishes refresh rather than re-event | the reporter re-sends state on a timer so the pill survives a backend restart; bumping seq for those would re-announce a months-old answer every 15s |
 | 2026-10-08 | the UI ignores the retained event for the dialog, not the pill | the pill wants the replayed state; the dialog replaying it meant every kiosk reload popped up the last answer |
 | 2026-10-08 | pill falls back to the heartbeat when voice is down | the event stream only reports what a live pipeline says; a pipeline that died mid-utterance would leave the pill green forever |
+| 2026-10-08 | Whisper loads with `local_files_only=True` by default | the weights are baked in, and letting faster-whisper revalidate against HF turned a healthy cache into a boot failure on the real Pi. Opt back in with VOICE_WHISPER_ALLOW_DOWNLOAD |
 | 2026-10-08 | the SLM may RE-WORD the backend's answer | USER: wants variation, accepts the latency. PARTIALLY SUPERSEDES the 2026-10-04 "backend composes the speech string" row — the backend still decides what is true and still composes the canonical sentence; the model only chooses how to say it |
 | 2026-10-08 | rewrites are VALIDATED against a backend-supplied contract, and rejected | the 2026-10-04 reasoning ("stops a small model inventing statuses") was right and is unchanged. Rejection beats correction: a discarded rewrite costs naturalness, a wrong one costs trust in the panel |
 | 2026-10-08 | polarity is enforced with require_any, not just must_include | requiring the word "voice" is satisfied by "voice is up and running". Caught before shipping, 2026-10-08 |
@@ -1012,6 +1036,14 @@ passed:
         dialog does NOT replay; a genuinely new answer right after still shows
       identical republish -> no new dialog, pill unchanged"
   - "UI build clean, tsc strict passes; API key still absent from dist/"
+  - "WHISPER OFFLINE LOAD, reproduced and fixed on the dev host:
+      against a TCP server that ACCEPTS then hangs up (the Pi's condition),
+      with a complete cache present:
+        local_files_only=False -> RemoteProtocolError, identical to the Pi
+        local_files_only=True  -> loaded from cache in 0.19s
+      against a REFUSED port, both load fine - which is why this never
+      reproduced without the hang-up server, and why a dev box with no network
+      is not a valid test of it"
   - "RESPONSE PHRASING, live backend on :8777:
       POST /voice/intent now returns facts + must_include + forbid +
       require_any + phrasable, for both the healthy and the voice-down case,
