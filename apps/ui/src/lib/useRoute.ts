@@ -14,9 +14,13 @@
  */
 import { useEffect, useState } from 'react'
 
-export const ROUTES = ['dashboard', 'music'] as const
+// Order here is only the valid set; the sidebar decides what the rail looks
+// like. `dashboard` is first because it is the default route.
+export const ROUTES = ['dashboard', 'music', 'systems', 'settings'] as const
 export type Route = (typeof ROUTES)[number]
 
+// Timers and alarms are what the panel is for day to day, so an unrecognised
+// hash lands there rather than on the systems grid.
 const DEFAULT: Route = 'dashboard'
 
 function parse(hash: string): Route {

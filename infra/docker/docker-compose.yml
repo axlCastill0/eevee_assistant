@@ -8,12 +8,17 @@ services:
     network_mode: host
 
     volumes:
-      # Writable state, as opposed to the read-only models mount below. The
-      # only thing in here is the Spotify refresh token, and it is the reason
-      # the Pi stays connected across restarts instead of needing a new
-      # consent screen every time. Mode 0600, written atomically; see
-      # spotify.py and docs/SPOTIFY.md.
+      # Writable state, as opposed to the read-only mounts. Holds the Spotify
+      # refresh token (which is why the Pi stays connected across restarts),
+      # the weekly alarms and the dashboard settings. Written atomically; see
+      # spotify.py, alarms.py and settings.py.
       - ../../state:/app/state
+
+      # Alarm and timer sounds. Read-only: the backend serves these files and
+      # never writes them, and "upload" here is `scp` or a USB stick, which
+      # needs no endpoint to defend. Drop .mp3 files in and they appear in the
+      # Settings dropdown with no rebuild and no restart.
+      - ../../media:/app/media:ro
 
     env_file:
       - path: .env

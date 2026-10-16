@@ -71,6 +71,49 @@ export interface CommandResult {
   action?: string
 }
 
+// --- timers, alarms, settings ---------------------------------------------
+
+export interface TimerEntry {
+  id: string
+  label: string
+  duration_s: number
+  remaining_s: number
+  ringing: boolean
+  /** Wall-clock time this timer ends, pre-formatted. Null once it has fired. */
+  ends_at: string | null
+}
+
+export interface AlarmEntry {
+  weekday: number
+  day: string
+  hour: number
+  minute: number
+  enabled: boolean
+  /** Pre-formatted AM/PM, so the panel and anything spoken agree. */
+  label: string
+  next_fire_in_s: number | null
+}
+
+export interface SoundEntry {
+  file: string
+  label: string
+}
+
+export interface ClockState {
+  timers: { timers: TimerEntry[]; ringing: TimerEntry[] }
+  alarms: {
+    alarms: AlarmEntry[]
+    ringing: AlarmEntry | null
+    next_fire_in_s: number | null
+  }
+  settings: {
+    timer_sound: string
+    alarm_sound: string
+    sounds: SoundEntry[]
+    media_dir: string
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -131,15 +174,19 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
+  return send<T>('POST', path, body)
+}
+
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
     const res = await fetch(`/api${path}`, {
-      method: 'POST',
+      method,
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (!res.ok) throw new ApiError(`Backend returned ${res.status}`, res.status)
     return (await res.json()) as T
@@ -154,8 +201,52 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   }
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  return send<T>('PUT', path, body)
+}
+
+async function del<T>(path: string): Promise<T> {
+  return send<T>('DELETE', path)
+}
+
 export function fetchServices() {
   return get<ServicesResponse>('/services')
+}
+
+export function fetchClockState() {
+  return get<ClockState>('/clock/state')
+}
+
+export function createTimer(durationS: number) {
+  return post<TimerEntry>('/clock/timers', { duration_s: durationS })
+}
+
+export function deleteTimer(id: string) {
+  return del<{ status: string }>(`/clock/timers/${id}`)
+}
+
+export function stopRingingTimers() {
+  return post<{ stopped: number }>('/clock/timers/stop-all', {})
+}
+
+export function updateAlarm(
+  weekday: number,
+  values: { hour?: number; minute?: number; enabled?: boolean },
+) {
+  return put<AlarmEntry>(`/clock/alarms/${weekday}`, values)
+}
+
+export function stopAlarm() {
+  return post<{ stopped: boolean }>('/clock/alarms/stop', {})
+}
+
+export function updateSettings(values: { timer_sound?: string; alarm_sound?: string }) {
+  return put<ClockState['settings']>('/clock/settings', values)
+}
+
+/** Same-origin audio, streamed by the backend out of the media directory. */
+export function soundUrl(file: string) {
+  return `/api/clock/sounds/${encodeURIComponent(file)}`
 }
 
 export function fetchNowPlaying() {

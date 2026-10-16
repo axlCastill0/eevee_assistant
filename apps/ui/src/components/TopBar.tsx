@@ -1,31 +1,33 @@
 import { clockTime, longDate } from '../lib/format'
-import type { ThemeMode } from '../lib/useTheme'
 import type { VoiceState } from '../lib/useVoiceEvents'
 import { PollRing } from './PollRing'
-import { ThemeToggle } from './ThemeToggle'
+import { StatusIcons } from './StatusIcons'
 import { VoicePill } from './VoicePill'
 import './TopBar.css'
 
+/** The theme control moved to the Settings page on 2026-10-16, which is what
+ *  freed the room here for status icons. Those are the point of this bar: it
+ *  is a status strip, not a control strip. */
 export function TopBar({
   now,
-  mode,
-  resolved,
   clockSynced,
-  onChoose,
   latencyMs,
   failures,
   loading,
   voice,
+  timerCount,
+  alarmSoon,
 }: {
   now: Date
-  mode: ThemeMode
-  resolved: 'light' | 'dark'
   clockSynced: boolean
-  onChoose: (m: ThemeMode) => void
   latencyMs: number | null
   failures: number
   loading: boolean
   voice: { state: VoiceState; transcript: string | null; connected: boolean }
+  /** How many timers are counting down. Zero hides the icon entirely. */
+  timerCount: number
+  /** An alarm is set to go off within 24 hours. */
+  alarmSoon: boolean
 }) {
   const { hm, seconds, meridiem } = clockTime(now)
 
@@ -67,12 +69,7 @@ export function TopBar({
           </div>
         </div>
 
-        <ThemeToggle
-          mode={mode}
-          resolved={resolved}
-          clockSynced={clockSynced}
-          onChoose={onChoose}
-        />
+        <StatusIcons timerCount={timerCount} alarmSoon={alarmSoon} />
       </div>
     </header>
   )

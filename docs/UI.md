@@ -122,35 +122,85 @@ would leave the dashboard in a fallback face.
 
 ## 5. Layout
 
-The shell is a fixed rail plus one view. Chrome (clock, voice pill, theme) is
-global: it stays put when the view changes, because the clock and the pill are
-the two things that must be readable whatever page is up.
+The shell is a fixed rail plus one view. Chrome (clock, voice pill, status
+icons) is global: it stays put when the view changes, because the clock and
+the pill are the two things that must be readable whatever page is up.
 
 ```
 ┌────┬─────────────────────────────────────────────────┐
-│ ▌  │  8:41 ³⁷ PM  (● Ready) [live 9ms] [Light|Dark] │  TopBar
-│ ▪▪ │  Sunday, October 4                              │
+│ ▌  │  8:41 ³⁷ PM  (● Ready) [live 9ms] [⏱2] [🔔]    │  TopBar
+│ ⏱  │  Sunday, October 4                              │
+│Dash│                                                 │
+│ ♪  │                                                 │
+│Mus │              the active view                    │
+│ ▪▪ │                                                 │
 │Sys │                                                 │
 │    │                                                 │
-│ ♪  │              the active view                    │
-│Mus │                                                 │
+│ ⚙  │                                                 │
+│Set │                                                 │
 └────┴─────────────────────────────────────────────────┘
   ▲
-  Sidebar — one button per view, 68px+ targets
+  Sidebar — Dashboard, Music, Systems, then Settings pinned to the
+  bottom. 68px+ targets.
 ```
+
+The top bar is a **status strip, not a control strip**. The theme toggle moved
+to Settings on 2026-10-16 to make room for status icons: a stopwatch when
+timers are running (with a count when there are several) and a bell when an
+alarm is due within 24 hours. Neither is a countdown and neither is a button —
+a ticking number up there would pull the eye every second on every page, and
+tapping a status to navigate is a hidden affordance on a panel whose
+navigation is a permanent rail two inches to the left.
+
+The music view renders no top bar at all; see below.
 
 ### Routing
 
-Hash routing, hand-written, in `lib/useRoute.ts`. Two views, no params, no
+Hash routing, hand-written, in `lib/useRoute.ts`. Four views, no params, no
 nested routes: react-router is ~20 KB to replace 30 lines, and every
 dependency here has to survive an `npm ci` during an image build on the Pi.
 The hash rather than `pushState` because a reload then never 404s, including
 against the dev server.
 
 Adding a view is three edits: a `Route` in `useRoute.ts`, an entry in
-`Sidebar.tsx`'s `ITEMS`, and a branch in `App.tsx`.
+`Sidebar.tsx`'s `ITEMS` (or `FOOTER_ITEMS`), and a branch in `App.tsx`.
 
 ### Views
+
+**Dashboard** is the default route: it is what the panel is for day to day, so
+an unrecognised hash lands there rather than on the systems grid.
+
+**Dashboard** — timers left, alarms right. The countdowns are the largest type
+on the page, because the question it answers from across the room is "how long
+left". Timers are also settable by voice; alarms are screen-only. Full feature
+notes are in `docs/TIMERS_AND_ALARMS.md`.
+
+```
+┌──────────────────────────────────────────────────────┐
+│ TIMERS                     │ ALARMS                  │
+│ [1][3][5][10][15][30] min  │ Mon  7:30 AM     (on )  │
+│ [−]   0:00   [+]  [Start]  │ Tue  6:45 AM     (on )  │
+│                            │ Wed  7:45 PM     ( off) │
+│  9:18                    ✕ │   [−] hour [+] ...Done  │
+│  10 minutes · ends 10:33   │ Thu  7:00 AM     ( off) │
+└──────────────────────────────────────────────────────┘
+```
+
+Two touch decisions worth keeping: the duration and time controls are
+**steppers, not text fields or native pickers**, because there is no keyboard
+on this panel and Chromium's native time picker assumes one; and editing a
+time **expands in place** rather than opening a modal, so the rest of the week
+stays visible while one day changes.
+
+The ringing banner is rendered by the **shell**, not by this view, so a timer
+that ends while the panel is on Music still shows and is still stoppable. The
+poll behind it lives in the shell for the same reason.
+
+**Settings** — three rows. Two are server-side (timer and alarm end sounds,
+chosen from whatever is in `media/`); the theme is not, and stays in this
+browser's localStorage. A theme belongs to a display — a phone opening the
+dashboard can be light while the wall panel is dark — and the voice command
+`set_theme` writes to that same local store.
 
 **Systems** — the original dashboard, unchanged:
 

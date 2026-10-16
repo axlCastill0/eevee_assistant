@@ -663,6 +663,12 @@ EOF
 chmod +x ~/kiosk.sh
 ```
 
+`--autoplay-policy=no-user-gesture-required` is load-bearing: without it
+Chromium refuses to play audio that no one tapped for, which is exactly what
+a timer or alarm sound is. The dashboard degrades gracefully (the ringing
+banner offers a tap-to-play button), but on a wall panel you want the sound
+without the tap. See `docs/TIMERS_AND_ALARMS.md`.
+
 `--password-store=basic` and `--use-mock-keychain` stop Chromium looking for a
 keyring that does not exist on Lite — a common cause of it failing to start
 with no obvious message.

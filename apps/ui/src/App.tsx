@@ -1,24 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { DetailSheet } from './components/DetailSheet'
+import { RingingBanner } from './components/RingingBanner'
 import { ScreenVeil } from './components/ScreenVeil'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { VoiceDialog } from './components/VoiceDialog'
+import { stopAlarm, stopRingingTimers } from './lib/api'
 import { useClock } from './lib/useClock'
+import { useClockState } from './lib/useClockState'
 import { useRoute } from './lib/useRoute'
 import { useServices } from './lib/useServices'
 import { useTheme } from './lib/useTheme'
 import { useVoiceEvents } from './lib/useVoiceEvents'
+import { Clock } from './views/Clock'
 import { Dashboard } from './views/Dashboard'
 import { NowPlaying } from './views/NowPlaying'
+import { Settings } from './views/Settings'
 
 export default function App() {
   const now = useClock()
   const route = useRoute()
-  const { mode, resolved, clockSynced, choose } = useTheme()
+  const { mode, clockSynced, choose } = useTheme()
   const { data, error, loading, updatedAt, latencyMs, failures, history } = useServices()
   const voice = useVoiceEvents()
+
+  // Polled by the shell, not by a view: an alarm has to ring whatever page is
+  // on screen, and the top bar's status icons need the same data.
+  const clock = useClockState()
 
   const [openName, setOpenName] = useState<string | null>(null)
   const [screenOff, setScreenOff] = useState(false)
@@ -80,10 +89,7 @@ export default function App() {
         {route !== 'music' && (
           <TopBar
             now={now}
-            mode={mode}
-            resolved={resolved}
             clockSynced={clockSynced}
-            onChoose={choose}
             latencyMs={latencyMs}
             failures={failures}
             loading={loading}
@@ -92,15 +98,36 @@ export default function App() {
               transcript: voice.transcript,
               connected: voice.connected,
             }}
+            timerCount={clock.timers.filter((t) => !t.ringing).length}
+            alarmSoon={clock.alarmSoon}
           />
         )}
 
-        {route === 'music' ? (
+        {route === 'music' && (
           /* `active` gates the polling, so the view stops asking the backend
              for playback the moment it is not on screen. Mounting is enough
              to start it; unmounting stops it. */
           <NowPlaying active />
-        ) : (
+        )}
+
+        {route === 'dashboard' && (
+          <Clock
+            timers={clock.timers}
+            alarms={clock.data?.alarms.alarms ?? []}
+            onChanged={clock.refresh}
+          />
+        )}
+
+        {route === 'settings' && (
+          <Settings
+            settings={clock.data?.settings ?? null}
+            mode={mode}
+            onChooseTheme={choose}
+            onChanged={clock.refresh}
+          />
+        )}
+
+        {route === 'systems' && (
           <Dashboard
             data={data}
             error={error}
@@ -121,6 +148,17 @@ export default function App() {
         seq={voice.seq}
         speaking={voice.state === 'speaking'}
         retained={voice.retained}
+      />
+
+      {/* Rendered by the shell so it is reachable from every page, including
+          the full-bleed music view. */}
+      <RingingBanner
+        timers={clock.ringingTimers}
+        alarm={clock.ringingAlarm}
+        timerSound={clock.data?.settings.timer_sound ?? ''}
+        alarmSound={clock.data?.settings.alarm_sound ?? ''}
+        onStopTimers={() => void stopRingingTimers().then(clock.refresh)}
+        onStopAlarm={() => void stopAlarm().then(clock.refresh)}
       />
 
       <ScreenVeil on={screenOff} onDismiss={() => setScreenOff(false)} />

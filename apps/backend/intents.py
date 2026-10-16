@@ -29,6 +29,7 @@ from typing import Callable, Optional
 
 import events
 import services
+import timers
 import sysinfo
 import weather
 
@@ -154,10 +155,31 @@ INTENTS: dict[str, Intent] = {
         description="ask how hot the machine or the processor is running",
         needs_item=False,
     ),
+    "set_timer": Intent(
+        name="set_timer",
+        description=(
+            "start a countdown timer. item is the duration exactly as said, "
+            "like '10 minutes' or '1 hour 30 minutes'"
+        ),
+        needs_item=True,
+    ),
+    "cancel_timer": Intent(
+        name="cancel_timer",
+        description=(
+            "stop or cancel a running timer. item is the timer's duration if "
+            "one was named, otherwise null"
+        ),
+        needs_item=True,
+    ),
+    "timer_status": Intent(
+        name="timer_status",
+        description="ask how much time is left on a timer, or what timers are running",
+        needs_item=False,
+    ),
     "unknown": Intent(
         name="unknown",
         description=(
-            "anything else. music, timers, lights, maths, jokes — all unknown. "
+            "anything else. music, alarms, lights, maths, jokes — all unknown. "
             "when in doubt, use this"
         ),
         needs_item=False,
@@ -443,6 +465,118 @@ def _unknown(item: Optional[str]) -> tuple[str, bool]:
     ), False
 
 
+def _set_timer(item: Optional[str]) -> tuple[str, bool]:
+    """Start a timer from a spoken duration.
+
+    The phrase is parsed HERE rather than in the voice container, for the same
+    reason the wording lives here: the backend owns the data, and the
+    classifier's job ends at handing over the words it heard.
+    """
+    seconds = timers.parse_duration(item or "")
+    if seconds is None:
+        # Saying what it did not understand beats a generic failure: the user
+        # can hear whether the transcript was the problem.
+        heard = f" I heard {item}." if item else ""
+        return _pick(
+            f"I didn't catch how long for.{heard}",
+            f"How long should the timer be?{heard}",
+        ), False
+
+    timer = timers.add(seconds)
+    return _pick(
+        f"Timer set for {timer.label}.",
+        f"{timer.label.capitalize()}, starting now.",
+        f"Okay, {timer.label}.",
+    ), True
+
+
+def _as_adjective(label: str) -> str:
+    """"10 minutes" -> "10 minute", for "the 10 minute timer".
+
+    English wants the singular when a duration is used as an adjective, and
+    "the 10 minutes timer" is the kind of thing that makes a synthesised voice
+    sound like a robot reading a database row.
+    """
+    for plural, singular in ((" minutes", " minute"), (" hours", " hour"),
+                             (" seconds", " second")):
+        if label.endswith(plural):
+            return label[: -len(plural)] + singular
+    return label
+
+
+def _cancel_timer(item: Optional[str]) -> tuple[str, bool]:
+    """Cancel one timer, or all of them when there is no ambiguity."""
+    running = timers.all_timers()
+
+    if not running:
+        return _pick(
+            "There's no timer running.",
+            "Nothing is timing right now.",
+        ), True
+
+    if len(running) == 1:
+        timers.cancel(running[0].id)
+        name = _as_adjective(running[0].label)
+        return _pick(
+            f"Cancelled the {name} timer.",
+            f"{name.capitalize()} timer cancelled.",
+        ), True
+
+    # Several are running, so a duration has to pick one out. This is why
+    # timers are labelled by their duration in the first place.
+    wanted = timers.parse_duration(item or "")
+    if wanted is not None:
+        for timer in running:
+            if timer.duration_s == wanted:
+                timers.cancel(timer.id)
+                return f"Cancelled the {_as_adjective(timer.label)} timer.", True
+        return (f"I don't have a {_as_adjective(timers.describe(wanted))} timer. "
+                f"{_running_summary(running)}"), False
+
+    # No duration given and more than one candidate. Asking which beats
+    # cancelling the wrong one, and beats cancelling all of them silently.
+    return (f"Which one? {_running_summary(running)}"), False
+
+
+def _timer_status(item: Optional[str]) -> tuple[str, bool]:
+    running = timers.active()
+    ringing = timers.ringing()
+
+    if ringing and not running:
+        return _pick(
+            "A timer is going off right now.",
+            "Your timer just finished.",
+        ), True
+
+    if not running:
+        return _pick(
+            "No timers running.",
+            "Nothing is timing right now.",
+        ), True
+
+    if len(running) == 1:
+        left = timers.describe(round(running[0].remaining_s))
+        return f"{left} left on the {_as_adjective(running[0].label)} timer.", True
+
+    return _running_summary(running), True
+
+
+def _running_summary(running: list) -> str:
+    """"3 minutes left on the 10 minute timer, and 40 minutes on the 1 hour one."
+
+    Composed here rather than in the dashboard or the model so the spoken and
+    the on-screen versions cannot drift apart.
+    """
+    parts = [
+        f"{timers.describe(round(t.remaining_s))} on the "
+        f"{_as_adjective(t.label)} timer"
+        for t in running
+    ]
+    if len(parts) == 1:
+        return f"{parts[0].capitalize()} left."
+    return f"{', '.join(parts[:-1])}, and {parts[-1]}."
+
+
 _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "system_health": _system_health,
     "get_time": _get_time,
@@ -456,6 +590,9 @@ _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "list_capabilities": _list_capabilities,
     "get_uptime": _get_uptime,
     "cpu_temp": _cpu_temp,
+    "set_timer": _set_timer,
+    "cancel_timer": _cancel_timer,
+    "timer_status": _timer_status,
     "unknown": _unknown,
 }
 

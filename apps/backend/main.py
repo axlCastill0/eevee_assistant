@@ -11,7 +11,7 @@ except ImportError:
     pass
 
 from auth import require_api_key
-from routes import spotify, status, voice
+from routes import clock, spotify, status, voice
 
 # Uvicorn configures its own loggers but not the root logger, so module-level
 # loggers (routes.voice, intents) would otherwise be silent.
@@ -30,6 +30,10 @@ app.include_router(voice.router, prefix="/voice", tags=["voice"])
 app.include_router(voice.ws_router, prefix="/voice", tags=["voice"])
 # No prefix: /services is system-wide, not scoped to a subsystem.
 app.include_router(status.router, tags=["status"])
+
+# Timers, alarms, settings and the sound library. One prefix because the
+# dashboard polls them as one state object; see routes/clock.py.
+app.include_router(clock.router, prefix="/clock", tags=["clock"])
 
 app.include_router(spotify.router, prefix="/spotify", tags=["spotify"])
 # Keyless, and only the OAuth callback: Spotify redirects a browser there and

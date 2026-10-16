@@ -27,6 +27,9 @@ apps/
     intents.py        INTENT REGISTRY - single source of truth; handlers and
                       their hand-written phrasing variants
     sysinfo.py        host uptime + SoC temperature, read from /proc and /sys
+    timers.py         TIMERS: monotonic deadlines, duration parsing, in memory
+    alarms.py         ALARMS: 7 weekday slots, wall clock, persisted to state/
+    settings.py       timer/alarm sound choice + the media/ sound library
     spotify.py        SPOTIFY: OAuth tokens, TTL'd playback snapshot, the four
                       controls, cover-art fetch. urllib, no new deps
     weather.py        Open-Meteo lookup, cached, no API key
@@ -37,6 +40,9 @@ apps/
                       /voice/intent, /voice/state, WS /voice/events
       spotify.py      /spotify/now-playing|command|art|status|login|code|
                       disconnect (keyed) + /spotify/callback (KEYLESS)
+      clock.py        /clock/state (ONE poll for timers+alarms+settings),
+                      /clock/timers, /clock/alarms/<weekday>, /clock/settings,
+                      /clock/sounds/<file>
       status.py       GET /services - the dashboard's data source
     requirements.txt
     .env.example
@@ -67,11 +73,16 @@ apps/
   ui/                 Dashboard SPA. Vite + React + TS, static, nginx-served.
     index.html        Inline bg style prevents a white flash on cold boot
     src/App.tsx       Shell: sidebar + global chrome + the active view
-    src/views/        Dashboard.tsx (systems grid), NowPlaying.tsx (Spotify)
+    src/views/        Clock.tsx (timers+alarms, the HOME route "dashboard"),
+                      NowPlaying.tsx (Spotify), Dashboard.tsx (systems grid,
+                      route "systems"), Settings.tsx
+    src/components/RingingBanner.tsx  plays the mp3, Stop button; in the SHELL
+    src/components/StatusIcons.tsx    top-bar timer/alarm icons
     src/components/Sidebar.tsx   view switcher rail
     src/lib/useRoute.ts          hand-written hash router (no react-router)
     src/lib/useSpotify.ts        1Hz poll + local progress interpolation
     src/lib/coverColors.ts       two dominant cover colours off a 32x32 canvas
+    src/lib/useClockState.ts     1Hz /clock/state poll + local countdown
     vite.config.ts    Dev-only /api proxy that injects the key like nginx does
     package.json
     .env.example      Dev server only; NOT compiled into the bundle
@@ -107,6 +118,7 @@ docs/
   README_PI.md        Pi setup from a fresh clone; audio device lock-in
   VOICE_SETUP.md      Pi setup, architecture, latency, gotchas, wake word
   SPOTIFY.md          Spotify app registration, the one-time connect, routes
+  TIMERS_AND_ALARMS.md  media folder, kiosk autoplay flag, voice phrasings
   PSU.md              power supply requirements
   UI.md               dashboard stack rationale, theme, touch, Pi perf, kiosk
 scripts/
@@ -117,8 +129,10 @@ hey_eevee_model/             COMMITTED. "hey eevee" heed export + its README.
 models/                      GITIGNORED. Bind-mounted read-only into voice.
 state/                       GITIGNORED. Bind-mounted READ-WRITE into backend
                              at /app/state. Holds spotify.json (refresh token,
-                             mode 0600). Its absence costs a re-authorization
-                             on every restart, nothing worse.
+                             mode 0600), alarms.json and settings.json.
+media/                       GITIGNORED. Bind-mounted READ-ONLY at /app/media.
+                             Timer/alarm sounds; read per request, so a new
+                             file appears in Settings with no restart.
 _temp/                       GITIGNORED. Original prototype; reference only.
 AGENT_CONTEXT.md             This file.
 ```
@@ -365,6 +379,60 @@ BOOT GOTCHA - WHISPER MUST NOT TOUCH THE NETWORK (fixed 2026-10-08):
 latency:
   fastpath_hit: ~2s end-to-end
   slm_fallback: ~6-7s end-to-end
+```
+
+## timers and alarms
+
+```yaml
+home_route: "dashboard" = views/Clock.tsx (timers + alarms). The systems grid
+  moved to route "systems". Sidebar order: Dashboard, Music, Systems, then
+  Settings pinned to the bottom.
+
+timers:
+  storage: IN MEMORY, monotonic deadlines. Not persisted on purpose -- a
+    countdown only means anything relative to now, and resurrecting one that
+    should have fired two minutes ago is worse than losing it.
+  several at once (USER DECISION 2026-10-16). Labelled by duration, which is
+    what makes a spoken "cancel the 10 minute timer" resolvable.
+  voice: set_timer / cancel_timer / timer_status, with fast-path regexes.
+    Durations parsed on the BACKEND (timers.parse_duration): "half an hour",
+    "ninety seconds", and a bare "ten" = ten minutes.
+    NOTE: new intents need `docker compose restart voice` -- the pipeline
+    fetches the catalogue once at startup.
+
+alarms:
+  7 weekday slots (USER DECISION 2026-10-16), NOT a list of arbitrary alarms.
+  storage: PERSISTED to state/alarms.json. A schedule is still true after a
+    reboot. WALL CLOCK, deliberately opposite to timers: "has 7:30 happened"
+    is a wall-clock question, so an NTP step must move the alarm with it.
+  fires once per day: stopping records the date, which is also what stops a
+    restart inside the 120s fire window from re-ringing it.
+  screen-only. No voice (USER DECISION): a misheard word costs most on a
+    recurring weekly commitment.
+
+audio:
+  PLAYS IN THE KIOSK BROWSER (USER DECISION 2026-10-16), not the backend and
+  not the voice container -- the voice loop is single-threaded, so a 3-minute
+  song there would deafen the wake word for its whole duration.
+  Needs --autoplay-policy=no-user-gesture-required in kiosk.sh (already in
+  the documented launcher). Without it the banner offers a tap-to-play
+  button rather than failing silently.
+  One play-through, then silence. Stop button or `ended` both POST the same
+  acknowledgement.
+
+polling:
+  /clock/state is polled 1Hz BY THE APP SHELL, not by the Dashboard view. An
+  alarm must ring whatever page is on screen, and the top bar's icons need
+  the same data. Countdowns are advanced locally between samples.
+
+top_bar: theme toggle REMOVED (moved to Settings) to make room for static
+  status icons: stopwatch while timers run, bell when an alarm is due within
+  24h. Neither is a countdown; neither is a button.
+
+theme: still per-browser localStorage, NOT a server setting. A theme belongs
+  to a display, and `set_theme` by voice writes the same local store. The
+  Settings page shows the control next to two server-side ones anyway,
+  because that is where a person looks for it.
 ```
 
 ## container gotchas
@@ -843,6 +911,9 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `SPOTIFY_CLIENT_SECRET` | no | backend `spotify.py` | never leaves the backend |
 | `SPOTIFY_REDIRECT_URI` | no | backend `spotify.py` | default `http://127.0.0.1:8000/spotify/callback`; must match the Spotify dashboard EXACTLY. `localhost` is rejected by Spotify |
 | `SPOTIFY_TOKEN_PATH` | no | backend `spotify.py` | default `/app/state/spotify.json`; must be writable or authorization is lost on restart |
+| `MEDIA_DIR` | no | backend `settings.py` | default `/app/media`; the sound library |
+| `ALARMS_PATH` | no | backend `alarms.py` | default `/app/state/alarms.json` |
+| `SETTINGS_PATH` | no | backend `settings.py` | default `/app/state/settings.json` |
 | `WEATHER_LAT` | no | backend `weather.py` | required for get_weather; without it the intent says so |
 | `WEATHER_LON` | no | backend `weather.py` | as above |
 | `WEATHER_PLACE` | no | backend `weather.py` | spoken aloud ("12 degrees in Toronto"); empty omits it |
@@ -1039,6 +1110,14 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | Dashboard (timers+alarms) is the home route; systems grid demoted to "systems" | USER: the new page is the main one. An unrecognised hash lands there too |
+| 2026-10-16 | timers in memory, alarms persisted | opposite lifetimes for opposite reasons: a countdown is only meaningful relative to now, a weekly schedule is still true after a reboot |
+| 2026-10-16 | timers monotonic, alarms wall clock | the Pi has no RTC and steps its clock at boot. A countdown must ignore that step; an alarm must follow it |
+| 2026-10-16 | alarm/timer audio plays in the KIOSK BROWSER | USER CHOICE from three options. The voice container owns the speaker but its loop is single-threaded, so a song there would deafen the wake word for minutes; the backend would need /dev/snd and a dmix setup to share the card |
+| 2026-10-16 | durations parsed on the backend, not in the voice container | same rule as the wording: the backend owns the data, the classifier's job ends at handing over the words it heard |
+| 2026-10-16 | /clock/state polled by the app shell, not the Dashboard view | an alarm set for 7am would be silent whenever the panel was left on Music |
+| 2026-10-16 | theme control moved from the top bar to Settings | USER: free the top bar for status icons. Storage stays per-browser localStorage -- a theme belongs to a display, not the house |
+| 2026-10-16 | sounds are files in a read-only bind mount, not uploads | `scp` is the whole interface, and there is no upload endpoint to defend |
 | 2026-10-16 | music view is full bleed, no top bar | USER: the clock, voice pill and connection readout are noise in front of an album cover. The sidebar stays, so there is always a way out of the view |
 | 2026-10-16 | VOICE_WW_THRESHOLD=0.9 on the Pi, overriding the sidecar's 0.603 | USER: the calibrated value fired on non-speech room noise. Env only, no rebuild, and the sidecar stays the documented default for anyone else |
 | 2026-10-16 | dashboard became an SPA: sidebar rail + hash router | USER: multiple views. Chrome (clock, voice pill) stays global because those two must be readable on every page |
@@ -1124,6 +1203,22 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS, REAL backend (uvicorn) + browser at 1024x600:
+     timers fire and ring and clear on stop-all; a 6s timer showed the ringing
+     banner and the browser fetched the sound (206 Partial Content, i.e. the
+     <audio> element really played it); alarm set for the current minute rang,
+     stopped, did NOT re-ring, and recorded last_fired to disk; alarms
+     persisted to alarms.json; settings rejected a sound outside the media dir
+     (400) and a traversal path on /clock/sounds (404); the alarm hour stepper
+     moved Wednesday 6:45 PM -> 7:45 PM through the real API; sidebar order and
+     the Settings page render correctly; top bar shows the timer count and the
+     alarm bell.
+     NOT VERIFIED: audible playback (no speaker here), the voice path end to
+     end on the Pi, and anything about Chromium's autoplay policy in kiosk
+     mode."
+  - "2026-10-16 macOS: timer intents exercised directly -- set/cancel/status
+     wording, the ambiguity branch when two timers run, and fast-path regexes
+     for 15 phrasings with no regressions on time/theme/health/weather."
   - "2026-10-16 macOS, browser at 1024x600 against the mock: music view
      measures exactly 0..600 vertically and 68..1024 horizontally (sidebar
      0..68), so it is genuinely full bleed with no gap; controls centred on

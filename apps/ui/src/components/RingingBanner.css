@@ -1,0 +1,71 @@
+/* Full-width bar pinned to the bottom, above everything including the music
+   view's full-bleed background. It must be reachable without first finding
+   the right page, so it is rendered by the shell and sits on top. */
+.ringing {
+  position: fixed;
+  z-index: 60;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) clamp(var(--space-4), 3vw, var(--space-6));
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.35);
+  animation: slide-up var(--dur) var(--ease-out);
+}
+
+/* An alarm is a commitment made in advance; a timer is one made a minute ago.
+   Different colours so a glance from across the room tells them apart. */
+.ringing--alarm {
+  background: var(--warn);
+  color: #1a1203;
+}
+
+.ringing__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ringing__title {
+  font-size: var(--text-lg);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.ringing__detail {
+  font-size: var(--text-sm);
+  opacity: 0.86;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ringing__btn {
+  flex: 0 0 auto;
+  min-width: 128px;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-full);
+  font-size: var(--text-base);
+  font-weight: 650;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+/* Stop is the one you reach for half asleep: solid, and the widest target
+   on the bar. */
+.ringing__btn--stop {
+  min-width: 164px;
+  color: #15181d;
+  background: #fff;
+  border-color: transparent;
+}
+
+.ringing__btn:active {
+  transform: scale(0.96);
+}

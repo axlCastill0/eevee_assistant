@@ -25,6 +25,10 @@
   box-shadow: 0 0 0 4px var(--accent-wash);
 }
 
+.sidebar__spacer {
+  flex: 1;
+}
+
 .sidebar__item {
   position: relative;
   display: flex;

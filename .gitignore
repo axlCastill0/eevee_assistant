@@ -14,3 +14,6 @@ dist/
 # Writable container state. Holds the Spotify refresh token -- a credential,
 # and machine-specific. Never commit it.
 state/
+
+# Alarm/timer sounds. Whole songs, personal, and nothing to do with the code.
+media/

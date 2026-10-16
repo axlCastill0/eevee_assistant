@@ -45,6 +45,16 @@ def _strip_trailing(text: str) -> str:
 # Words meaning "working", used by several health patterns.
 _OK = r"(ok|okay|good|alright|all\s*right|fine|working|healthy|up|running|online)"
 
+# A spoken duration, as loosely as is safe: a count (digits or words) and a
+# unit, possibly twice ("1 hour 30 minutes"), plus the two fractions people
+# actually say. Only the SHAPE matters here -- timers.parse_duration on the
+# backend turns it into seconds, and rejects what it cannot read.
+_COUNT = (r"(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
+          r"twelve|fifteen|twenty|thirty|forty|forty-?five|fifty|sixty|ninety)")
+_UNIT = r"(seconds?|secs?|minutes?|mins?|hours?|hrs?)"
+_DURATION = (rf"(half\s+an?\s+(hour|minute)|an?\s+hour\s+and\s+a\s+half|"
+             rf"{_COUNT}\s*{_UNIT}(\s+(and\s+)?{_COUNT}\s*{_UNIT})?)")
+
 # Each entry: (compiled pattern, intent, item-capture-group or None).
 # Patterns are fullmatch-anchored against the cleaned transcript.
 _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
@@ -104,6 +114,51 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     (re.compile(r"(what\s+did\s+you\s+say|what\s+was\s+that)", re.I), "repeat_last", None),
     (re.compile(r"repeat", re.I), "repeat_last", None),
     (re.compile(r"come\s+again", re.I), "repeat_last", None),
+
+    # -- set_timer / cancel_timer / timer_status --------------------------
+    # The duration is captured RAW and parsed by the backend (timers.py). The
+    # fast path's job is to recognise the shape of the sentence, not to
+    # understand "an hour and a half".
+    #
+    # `_DURATION` is loose on purpose -- it has to survive Whisper writing
+    # "10" or "ten", and "for" being heard as "four". The backend returns
+    # None for anything it cannot parse, and the assistant then says it did
+    # not catch the duration, which is the right failure.
+    (re.compile(rf"(set|start|create|make)\s+(a\s+|an\s+|the\s+)?timer"
+                rf"(\s+(for|of|on))?\s+(?P<duration>{_DURATION})", re.I),
+     "set_timer", "duration"),
+    (re.compile(rf"timer\s+(for|of)\s+(?P<duration>{_DURATION})", re.I),
+     "set_timer", "duration"),
+    # "time me for 5 minutes" / "remind me in 10 minutes"
+    (re.compile(rf"(time|remind)\s+me\s+(for|in)\s+(?P<duration>{_DURATION})", re.I),
+     "set_timer", "duration"),
+    # "set a 10 minute timer" -- duration before the noun.
+    (re.compile(rf"(set|start|create|make)\s+(a\s+|an\s+)?"
+                rf"(?P<duration>{_DURATION})\s+timer", re.I),
+     "set_timer", "duration"),
+
+    # Cancel, in two rules rather than one with an optional capture: match()
+    # treats an EMPTY captured item as "the pattern matched too loosely" and
+    # defers to the SLM, which is right everywhere else and would silently
+    # swallow a bare "cancel the timer". Named duration first, bare second.
+    (re.compile(rf"(cancel|stop|clear|delete|kill)\s+(the\s+|my\s+|a\s+)?"
+                rf"(?P<duration>{_DURATION})\s+timer", re.I),
+     "cancel_timer", "duration"),
+    (re.compile(r"(cancel|stop|clear|delete|kill)\s+(the\s+|my\s+|a\s+)?timer", re.I),
+     "cancel_timer", None),
+    (re.compile(r"(cancel|stop|clear)\s+(all\s+)?timers", re.I),
+     "cancel_timer", None),
+
+    # Status.
+    (re.compile(r"(how\s+(much|long)\s+(time\s+)?(is\s+)?(left|remaining)"
+                r"(\s+on\s+(the\s+|my\s+)?timer)?)", re.I),
+     "timer_status", None),
+    (re.compile(r"(what('?s| is)\s+)?(the\s+|my\s+)?timer(\s+status)?", re.I),
+     "timer_status", None),
+    (re.compile(r"(any|are\s+there\s+any)\s+timers(\s+running)?", re.I),
+     "timer_status", None),
+    (re.compile(r"(check|show)\s+(the\s+|my\s+)?timers?", re.I),
+     "timer_status", None),
 
     # -- set_theme --------------------------------------------------------
     # The item group is the theme name; the handler maps synonyms.
