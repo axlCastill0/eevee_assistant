@@ -510,7 +510,21 @@ scored high comes back low, flip one convention at a time in
 
 - `VOICE_WW_THRESHOLD` overrides the sidecar's 0.603. Leave it unset to use
   the calibrated value; raise it if the word fires on other speech, lower it if
-  it misses.
+  it misses. **On the real Pi 2026-10-16 the calibrated value fired on
+  non-speech room noise**, and `VOICE_WW_THRESHOLD=0.9` settled it. No rebuild
+  is needed — it is read from `infra/docker/.env` at startup:
+
+  ```bash
+  docker compose up -d --force-recreate voice
+  ```
+
+  If 0.9 starts missing real "hey eevee"s, 0.8 is the middle ground. If it
+  still fires on noise at 0.9, the next lever is `consecutive_frames` in
+  `models/hey_eevee.json` (2 -> 3): that demands the word hold up across
+  240 ms instead of 160 ms, which room noise rarely does, at the cost of
+  about 80 ms of latency. Turning the mic's capture gain down in
+  `alsamixer -c eeveemic` attacks the same problem at the source — a hot mic
+  is what pushes noise past the energy gate in the first place.
 - The trigger needs 2 consecutive frames over threshold and then suppresses for
   0.7 s. Both come from `wake.json`, not from the environment.
 - The energy gate (RMS below -55 dBFS, or under 15 % of energy in 100–7000 Hz)

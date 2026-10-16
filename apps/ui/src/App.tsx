@@ -72,24 +72,28 @@ export default function App() {
     <div className="app">
       <Sidebar route={route} />
 
-      {/* The chrome stays put across views: the clock and the voice pill are
-          the two things that must be readable whatever page is up. */}
       <div className="app__main">
-        <TopBar
-          now={now}
-          mode={mode}
-          resolved={resolved}
-          clockSynced={clockSynced}
-          onChoose={choose}
-          latencyMs={latencyMs}
-          failures={failures}
-          loading={loading}
-          voice={{
-            state: voiceState,
-            transcript: voice.transcript,
-            connected: voice.connected,
-          }}
-        />
+        {/* The top bar is chrome on every view EXCEPT music, which is a
+            full-bleed display surface -- the clock and the connection
+            readout are noise in front of an album cover (USER DECISION
+            2026-10-16). The sidebar stays, so there is always a way out. */}
+        {route !== 'music' && (
+          <TopBar
+            now={now}
+            mode={mode}
+            resolved={resolved}
+            clockSynced={clockSynced}
+            onChoose={choose}
+            latencyMs={latencyMs}
+            failures={failures}
+            loading={loading}
+            voice={{
+              state: voiceState,
+              transcript: voice.transcript,
+              connected: voice.connected,
+            }}
+          />
+        )}
 
         {route === 'music' ? (
           /* `active` gates the polling, so the view stops asking the backend

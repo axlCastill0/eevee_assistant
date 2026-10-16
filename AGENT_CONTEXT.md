@@ -318,6 +318,10 @@ wake_word: "hey eevee" (heed export, models/hey_eevee.onnx) DEFAULT 2026-10-15
   SURPRISE COST (2026-10-15, real Pi): first SLM warmup after a rebuild took
     216 s, not the ~2 s a warm one takes -- 1.2 GB of GGUF being read off the
     SD card with a cold page cache. Not a hang. Subsequent boots are fast.
+  REAL-WORLD TUNING (Pi, 2026-10-16): the sidecar's calibrated 0.603 fired on
+    non-speech room noise. USER set VOICE_WW_THRESHOLD=0.9. Next levers if it
+    recurs, in order: consecutive_frames 2->3 in models/hey_eevee.json, then
+    mic capture gain in `alsamixer -c eeveemic`.
   window: detector keeps its own 1s ring buffer, so frame length is free; the
     pipeline feeds 1280 samples (80ms), so the model runs at an 80ms hop.
 
@@ -1035,6 +1039,8 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | music view is full bleed, no top bar | USER: the clock, voice pill and connection readout are noise in front of an album cover. The sidebar stays, so there is always a way out of the view |
+| 2026-10-16 | VOICE_WW_THRESHOLD=0.9 on the Pi, overriding the sidecar's 0.603 | USER: the calibrated value fired on non-speech room noise. Env only, no rebuild, and the sidecar stays the documented default for anyone else |
 | 2026-10-16 | dashboard became an SPA: sidebar rail + hash router | USER: multiple views. Chrome (clock, voice pill) stays global because those two must be readable on every page |
 | 2026-10-16 | hand-written hash router, not react-router | two views, no params, no loaders. ~20 KB and an npm dependency to replace 30 lines, on a bundle that is built on the Pi |
 | 2026-10-16 | Spotify: UI polls the BACKEND at 1Hz, backend polls Spotify on a TTL | Spotify sees one request every few seconds regardless of how many dashboards are open, and a page nobody is looking at costs nothing. Progress is interpolated client-side, so 1Hz looks continuous |
@@ -1118,6 +1124,10 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS, browser at 1024x600 against the mock: music view
+     measures exactly 0..600 vertically and 68..1024 horizontally (sidebar
+     0..68), so it is genuinely full bleed with no gap; controls centred on
+     the progress bar; the Systems view keeps its top bar."
   - "2026-10-16 macOS, python:3.11-slim-bookworm container with libasound2:
      voice_assistant.alsa loads libasound.so.2, every ctypes signature is
      accepted and card_index/list_cards/describe_cards run without crashing,

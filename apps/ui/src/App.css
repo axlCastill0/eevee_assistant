@@ -16,18 +16,12 @@
   gap: clamp(var(--space-4), 2vw, var(--space-6));
 }
 
-/* The music view bleeds its background to the edges, so it opts out of the
-   gutter the dashboard wants. Negative margins rather than a conditional
-   padding on __main: this keeps the top bar's gutter untouched. */
+/* The music view is full bleed: it runs to every edge of the pane, with only
+   the sidebar beside it. It renders no top bar, so there is nothing above it
+   to keep a gutter for. */
 .app__main:has(.np) {
-  padding-bottom: 0;
-}
-
-.np {
-  margin: 0 calc(-1 * clamp(var(--space-4), 2.2vw, var(--space-6)));
-  margin-bottom: 0;
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
+  padding: 0;
+  gap: 0;
 }
 
 /* Auto-fit grid: tiles reflow as services are added, with no breakpoint per
@@ -100,10 +94,6 @@
   .app__main {
     padding: var(--space-3) var(--space-4);
     gap: var(--space-3);
-  }
-
-  .np {
-    margin: 0 calc(-1 * var(--space-4));
   }
 
   .placeholder {

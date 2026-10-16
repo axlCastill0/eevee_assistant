@@ -103,11 +103,21 @@ ssh -L 8000:127.0.0.1:8000 tako@takoserv
 The tunnel is what makes the redirect work: `127.0.0.1:8000` in the laptop's
 browser now *is* the Pi's backend.
 
+`bind [127.0.0.1]:8000: Address already in use` means something on the
+**laptop** already holds that port — usually a tunnel left over from a previous
+attempt. The local port cannot be changed, because it has to match the
+registered redirect URI, so free it:
+
+```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN     # what is holding it
+pkill -f 'ssh -L 8000'               # if it is an old tunnel
+```
+
 Get the authorize URL from the Pi, through nginx, which adds the API key for
 you — open this in the laptop's browser:
 
 ```
-http://<pi-address>/api/spotify/login
+http://<pi-address>:8080/api/spotify/login
 ```
 
 Copy the `authorize_url` out of the JSON, open it, approve. The redirect goes
@@ -115,12 +125,17 @@ down the tunnel and you land on "Spotify connected".
 
 ### C. No tunnel: paste the code by hand
 
-Open the authorize URL anywhere, approve, and the browser will fail to load a
-`127.0.0.1:8000/spotify/callback?code=...` page. That is fine — the code is in
-the address bar. Copy it and post it:
+**This is the one to use if the Pi has no keyboard and the kiosk hides the
+address bar.** Everything happens on your laptop, which has both.
+
+On the laptop, open `http://<pi-address>:8080/api/spotify/login`, copy the
+`authorize_url`, open it, approve. The browser then fails to load a
+`127.0.0.1:8000/spotify/callback?code=...` page — expected, nothing is
+listening there on the laptop. The code is in the laptop's address bar. Copy
+it and post it to the Pi:
 
 ```bash
-curl -X POST http://<pi-address>/api/spotify/code \
+curl -X POST http://<pi-address>:8080/api/spotify/code \
   -H 'Content-Type: application/json' \
   -d '{"code":"<the code from the address bar>"}'
 ```
@@ -130,7 +145,7 @@ Codes are single-use and expire in about a minute, so do this promptly.
 ### Confirming it worked
 
 ```bash
-curl -s http://<pi-address>/api/spotify/status
+curl -s http://<pi-address>:8080/api/spotify/status
 ```
 
 `{"configured": true, "connected": true, ...}`. The Music view picks it up
