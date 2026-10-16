@@ -195,6 +195,25 @@ If the second is empty, the container predates the volume — recreate it:
 docker compose up -d --force-recreate backend
 ```
 
+### An alarm went off at the wrong time (hours out)
+
+The backend container is on a different timezone from the host. Alarms are
+wall-clock by design, so they follow the container's local clock:
+
+```bash
+date                                 # on the Pi
+docker compose exec backend date     # must match
+```
+
+`/etc/localtime` is mounted into the container to keep these in step. If they
+disagree, recreate the container — a restart does not pick up a new mount:
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+See "The clock is hours out" in `README_PI.md` for the host side.
+
 ### An alarm did not go off
 
 Check it is enabled, and that the Pi was awake. Then:

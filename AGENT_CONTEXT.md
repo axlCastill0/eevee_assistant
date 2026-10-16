@@ -470,6 +470,18 @@ sound_cache: /clock/sounds sends Cache-Control: max-age=3600, so a repeat
 ## container gotchas
 
 ```yaml
+utc_by_default:
+  A container's local time is UTC no matter what the host says. Found on the
+  Pi 2026-10-16: the dashboard clock (drawn by the BROWSER, so it follows the
+  host) was right while `docker compose exec backend date` was hours out.
+  What that breaks: intents._get_time, timers' ends_at, and alarms.py, which
+  is wall-clock by design and would have fired every alarm at the UTC hour.
+  Fixed by mounting /etc/localtime + /etc/timezone read-only into backend and
+  voice. A plain `restart` does NOT apply a new mount -- it needs
+  `up -d --force-recreate`.
+  Verified 2026-10-16: same python:3.13-slim image read 03:13 without the
+  mount and 23:13 (matching the host, EDT) with it.
+
 masked_proc:
   /proc/asound is EMPTY inside the voice container -- it is on the container
   runtime's default masked-paths list, so Docker mounts a tmpfs over it.
@@ -1142,6 +1154,7 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | /etc/localtime mounted read-only into backend and voice | a container runs on UTC whatever the host is set to, and the backend computes the ALARM SCHEDULE from its local clock -- a 7:30 alarm would have fired at 7:30 UTC. Mount rather than a TZ env var: glibc reads /etc/localtime directly, so it needs no tzdata in the image and follows the host |
 | 2026-10-16 | accent is RED (`--accent`), status `--down` stays red too | USER preference. Tolerable because nothing reads "red" alone as "broken": a down service is always labelled, carries a status dot, and pulses -- the accent never animates |
 | 2026-10-16 | voice pill's `ready` pinned to a new `--info` token, not `--accent` | `speaking` is red and means "do not talk over this". With a red accent, `ready` would have been the same colour, so the old blue survives as its own token |
 | 2026-10-16 | wake word back to `hey_jarvis` | USER: "hey eevee" fired on non-speech room noise even at 0.9. The heed engine stays in the code and the model stays installable -- only the default moved |

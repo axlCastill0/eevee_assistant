@@ -1172,6 +1172,44 @@ can be compared without going back to the host.
 Device resolution runs before any model loads, so this failure costs seconds,
 not the minutes the SLM warmup takes.
 
+### The clock is hours out, or alarms fire at the wrong time
+
+Two separate clocks, and they fail independently.
+
+**The host.** The Pi has no RTC, so it boots with a wrong clock and fixes it
+from the network:
+
+```bash
+timedatectl                       # zone, and "System clock synchronized"
+sudo timedatectl set-timezone Asia/Singapore      # your zone
+sudo timedatectl set-ntp true
+```
+
+`timedatectl list-timezones | grep -i <city>` finds the name. The dashboard's
+clock is drawn by the kiosk browser, so it follows the host and corrects as
+soon as this does (the top bar reads "waiting for clock sync" until then).
+
+**The containers.** These run on **UTC regardless of the host** unless told
+otherwise, and that is the one that does damage: the backend computes the
+spoken time, a timer's "ends at" and — worst — the weekly alarm schedule from
+its own local clock. An alarm set for 7:30 would fire at 7:30 UTC.
+
+```bash
+cd infra/docker
+docker compose exec backend date        # must agree with `date` on the host
+```
+
+`docker-compose.yml` mounts `/etc/localtime` and `/etc/timezone` read-only
+into backend and voice to fix this. If they still disagree, the containers
+predate that mount — **recreate** them, which a plain restart will not do:
+
+```bash
+docker compose up -d --force-recreate backend voice
+```
+
+Fix the host first: the mount propagates whatever the host has, so pointing it
+at a UTC host just gives you UTC in both places.
+
 ### Build runs out of memory or disk
 
 Check space with `df -h`. The images plus models need roughly 4–5 GB. Clear
