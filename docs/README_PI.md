@@ -342,11 +342,19 @@ step 1 the container still lists
 and a bare `eeveespk` matches nothing — the pipeline exits with
 `No output device matching 'eeveespk'`.
 
-`CARD=<id>` avoids that: `config.resolve_device()` reads the card number for
-that id out of `/proc/asound` (shared with the host, so it works inside the
-container) and then picks the PortAudio device whose name carries the matching
+`CARD=<id>` avoids that: `config.resolve_device()` resolves the id to a card
+number and then picks the PortAudio device whose name carries the matching
 `(hw:N,…)` address. The id is pinned, so the lookup holds through replugs even
 though the card number does not.
+
+That resolution asks **libasound** (over `/dev/snd`), not `/proc/asound`.
+`/proc/asound` is on the container runtime's default *masked paths* list, so
+Docker mounts an empty tmpfs over it: inside the container it is an empty
+directory, and reading it fails with `No such file or directory` while
+`cat /proc/asound/cards` on the host prints every card. libasound goes through
+ioctls on the control devices that are already mapped in for the audio
+hardware itself, so it needs no extra privilege and no `/proc` access. See
+`voice_assistant/alsa.py`.
 
 A plain name substring (`USB Microphone`) also works and is better than an
 index, but it is only unique by luck — two devices of the same model report the
@@ -1133,6 +1141,23 @@ different namespaces: a rule setting `ATTR{id}="eeveespk"` changes the id in
 ```ini
 VOICE_OUTPUT_DEVICE=CARD=eeveespk
 ```
+
+### "No ALSA card with id ..." and an empty card list
+
+The container cannot enumerate cards at all. Note that this is a *different*
+failure from the one above: the id is right, nothing can be seen.
+
+`/proc/asound` is masked to an empty directory inside a container, so the
+lookup goes through libasound over `/dev/snd` instead. If that comes back
+empty too, `/dev/snd` is not reaching the container or is not readable by it:
+
+```bash
+docker compose exec voice ls -l /dev/snd      # should list controlC0, pcmC0D0c, ...
+getent group audio                            # the number must match AUDIO_GID
+```
+
+`AUDIO_GID` is a **build** argument, so correcting it needs
+`docker compose up -d --build voice`, not a restart.
 
 Otherwise copy a name substring out of the device list. Either way the error
 message now prints the ALSA cards next to the PortAudio devices, so the two

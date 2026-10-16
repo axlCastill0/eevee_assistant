@@ -62,6 +62,8 @@ apps/
       tts.py          Piper TTS + output resampling
       pipeline.py     Main loop wiring every stage
       devices.py      `python -m voice_assistant.devices` audio device lister
+      alsa.py         CARD ID -> CARD NUMBER via libasound ctypes. Exists
+                      because /proc/asound is MASKED inside the container
   ui/                 Dashboard SPA. Vite + React + TS, static, nginx-served.
     index.html        Inline bg style prevents a white flash on cold boot
     src/App.tsx       Shell: sidebar + global chrome + the active view
@@ -359,6 +361,21 @@ BOOT GOTCHA - WHISPER MUST NOT TOUCH THE NETWORK (fixed 2026-10-08):
 latency:
   fastpath_hit: ~2s end-to-end
   slm_fallback: ~6-7s end-to-end
+```
+
+## container gotchas
+
+```yaml
+masked_proc:
+  /proc/asound is EMPTY inside the voice container -- it is on the container
+  runtime's default masked-paths list, so Docker mounts a tmpfs over it.
+  Symptom: the host's `cat /proc/asound/cards` lists every card while the
+  container reports `No such file or directory: /proc/asound/cards`.
+  Also masked by default: /proc/acpi, /proc/kcore, /proc/keys,
+  /proc/timer_list, /sys/firmware. Do not build a feature on reading any of
+  them from inside a container.
+  What to use instead for audio: libasound over /dev/snd (voice_assistant/
+  alsa.py). Cost the project one Pi rebuild cycle on 2026-10-16.
 ```
 
 ## spotify panel
@@ -1029,7 +1046,8 @@ xterm_is_required:
 | 2026-10-15 | wake word = "hey eevee" heed export, own frontend in `wake_heed.py` | USER supplied the model. openWakeWord cannot load it: different input contract (log-mel vs its own embedding frontend), so the sidecar's chain had to be reimplemented on numpy+scipy rather than configured |
 | 2026-10-15 | engine chosen by sidecar presence, not an env var | one less thing to set wrong; `hey_jarvis` and openWakeWord exports keep working untouched |
 | 2026-10-15 | threshold defaults to the sidecar's, not 0.5 | 0.603 is what the model was calibrated at; a hardcoded default would silently detune it |
-| 2026-10-15 | audio devices pinned by udev `ATTR{id}`, addressed as `CARD=<id>` | USER: the mic and speaker are permanent. The id survives replugs and cannot go ambiguous the way a `USB` substring does. CORRECTION, same day: a card id is NOT a PortAudio device name, so `resolve_device()` had to learn the `CARD=` form (resolved through /proc/asound) -- the first version of the guide told the user to use the bare id and the pipeline exited with "No output device matching 'eeveespk'" |
+| 2026-10-15 | audio devices pinned by udev `ATTR{id}`, addressed as `CARD=<id>` | USER: the mic and speaker are permanent. The id survives replugs and cannot go ambiguous the way a `USB` substring does. CORRECTION, same day: a card id is NOT a PortAudio device name, so `resolve_device()` had to learn the `CARD=` form -- the first version of the guide told the user to use the bare id and the pipeline exited with "No output device matching 'eeveespk'". SECOND CORRECTION 2026-10-16: that form first resolved the id through /proc/asound, which is masked inside the container; it now uses libasound (see the row below) |
+| 2026-10-16 | card id resolved through libasound (ctypes), not /proc/asound | /proc/asound is on the container runtime's DEFAULT MASKED PATHS, so Docker mounts an empty tmpfs over it: the host prints four cards, the container sees nothing. libasound uses ioctls on /dev/snd, already mapped in for the hardware. No new package -- libportaudio2 already links it |
 | 2026-10-15 | audio devices resolved before any model loads | the same failure surfaced only after a 216 s cold SLM warmup on the Pi. A config error knowable in 50 ms must not cost minutes |
 | 2026-10-04 | header name `X-API-Key` | conventional for static shared secrets |
 | 2026-10-04 | flat imports in each app | container copies the app dir to /app root |
@@ -1100,6 +1118,13 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS, python:3.11-slim-bookworm container with libasound2:
+     voice_assistant.alsa loads libasound.so.2, every ctypes signature is
+     accepted and card_index/list_cards/describe_cards run without crashing,
+     returning None/[] where the VM has no sound cards.
+     NOT VERIFIED: the id->number mapping against real hardware. No ALSA cards
+     exist on this host; the Pi's next rebuild settles it in seconds, since
+     device resolution now runs before any model loads."
   - "2026-10-16 macOS: backend via fastapi TestClient -- key required on
      /spotify/now-playing (401 without), unconfigured/unauthorized statuses
      correct, bad action 400, bad art id 404, callback with an unknown state
