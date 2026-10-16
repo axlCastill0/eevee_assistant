@@ -7,7 +7,7 @@ UPDATE THIS FILE IN THE SAME COMMIT AS ANY CHANGE IT DESCRIBES. See `## update_p
 meta:
   project: eevee_assistant
   root: /Users/tako/root/eevee_assistant
-  last_updated: 2026-10-08
+  last_updated: 2026-10-15
   git_branch_main: main
   target_host: Raspberry Pi 5 (8GB recommended), Raspberry Pi OS Lite 64-bit
                CONFIRMED 2026-10-07: the Pi runs Trixie (Debian 13), aarch64.
@@ -43,7 +43,10 @@ apps/
     voice_assistant/
       config.py       ALL config, env-driven (VOICE_*); resolve_device()
       helpers.py      downsample_mic, resample_for_output, preprocess_transcript
-      wake_word.py    openWakeWord wrapper + cooldown + thread caps
+      wake_word.py    make_detector() engine picker + openWakeWord wrapper
+      wake_heed.py    HEED WAKE WORD - log-mel frontend (HPF/notch, STFT,
+                      mel, CMN), energy gate, consecutive/refractory trigger
+      wake_check.py   `python -m voice_assistant.wake_check f.wav` prob check
       vad.py          Silero VAD v5 via onnxruntime (64-sample context)
       recorder.py     VAD-gated capture with frame-based pre-roll
       stt.py          faster-whisper tiny.en int8
@@ -89,10 +92,15 @@ infra/
     ui/Dockerfile            node build -> nginx:1.27-alpine
     ui/nginx.conf.template   serves dist + proxies /api INJECTING X-API-Key
 docs/
-  VOICE_SETUP.md      Pi setup, architecture, latency, gotchas, troubleshooting
+  README_PI.md        Pi setup from a fresh clone; audio device lock-in
+  VOICE_SETUP.md      Pi setup, architecture, latency, gotchas, wake word
+  PSU.md              power supply requirements
   UI.md               dashboard stack rationale, theme, touch, Pi perf, kiosk
 scripts/
   fetch-voice-models.sh      Downloads ~1.3GB into models/ (gitignored)
+  install-wake-model.sh      Copies hey_eevee_model/ -> models/hey_eevee.{onnx,json}
+hey_eevee_model/             COMMITTED. "hey eevee" heed export + its README.
+                             wake.onnx (fp32), wake.int8.onnx, wake.json.
 models/                      GITIGNORED. Bind-mounted read-only into voice.
 _temp/                       GITIGNORED. Original prototype; reference only.
 AGENT_CONTEXT.md             This file.
@@ -256,14 +264,42 @@ models:
   baked_into_image:          # no network needed on first boot
     - openWakeWord (~50MB)   # bundled "hey_jarvis"
     - whisper tiny.en (~75MB)
-  bind_mounted_from_models_dir:   # too large to bake
+  bind_mounted_from_models_dir:   # too large to bake, or repo-local
+    - hey_eevee.onnx + hey_eevee.json (44KB + 2KB)  # install-wake-model.sh
     - silero_vad.onnx (2MB)
     - qwen2.5-1.5b-instruct-q5_k_m.gguf (1.2GB)
     - en_US-amy-medium.onnx + .onnx.json (60MB)
 
-wake_word: hey_jarvis (openWakeWord bundled)
-  custom: set VOICE_WAKE_WORD to a .onnx path in models/; wake_word.py treats
-          a value with a path separator or .onnx suffix as a file
+wake_word: "hey eevee" (heed export, models/hey_eevee.onnx) DEFAULT 2026-10-15
+  engine_picked_by: wake_word.make_detector() -> wake_heed.is_heed_model(),
+    which is TRUE when a .json sidecar sits beside the .onnx. No sidecar, or a
+    bare name like hey_jarvis, falls through to the openWakeWord wrapper.
+  WHY NOT openWakeWord: incompatible input. openWakeWord models consume its
+    own melspectrogram+embedding frontend output; a heed export consumes
+    log-mel directly (input "mel", shape (1,40,101)).
+  sidecar_is_mandatory: wake.json carries threshold (0.603), mel params,
+    filter cutoffs, trigger and energy-gate constants. Loading fails without it.
+  preprocessing (wake_heed.py, order matters):
+    1. causal 100Hz 8th-order Butterworth HPF + 50/60Hz notches, biquad state
+       retained across frames (equivalent to one pass over the whole stream)
+    2. peak normalize to -3dBFS (cosmetic after CMN; kept for fidelity)
+    3. log-mel: 400-sample hann in a 512-pt FFT, hop 160, 40 bins, centred and
+       reflect-padded -> exactly 101 frames for a 1s window
+    4. CMN per mel bin across time. OMITTING IT MAKES THE MODEL WILDLY WRONG
+  trigger: 2 consecutive frames over threshold, then 0.7s refractory (from
+    wake.json, not env). Replaces the openWakeWord wrapper's COOLDOWN_FRAMES.
+  energy_gate: skips the model when RMS < -55dBFS or <15% of energy in
+    100-7000Hz. Measured on UNFILTERED audio on purpose - the HPF has already
+    deleted the rumble that would prove the energy is not speech.
+  UNPINNED CONVENTIONS (sidecar does not state them; defaults = torchaudio,
+    because the export is a torch 2.11 graph): mel scale HTK, filterbank
+    unnormalised (peak 1.0), natural log, notch Q=30. Overridable with
+    VOICE_WW_MEL_SCALE / VOICE_WW_MEL_NORM / VOICE_WW_LOG_BASE /
+    VOICE_WW_NOTCH_Q. NOT yet confirmed against a positive clip - only against
+    noise/tone/silence negatives. Use wake_check.py on a real "hey eevee"
+    recording to close that gap.
+  window: detector keeps its own 1s ring buffer, so frame length is free; the
+    pipeline feeds 1280 samples (80ms), so the model runs at an 80ms hop.
 
 classifier:
   model: Qwen2.5-1.5B-Instruct Q5_K_M
@@ -704,7 +740,13 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `VOICE_OUTPUT_DEVICE` | no | voice `config.py` | index or name substring; default `1` |
 | `VOICE_API_BASE_URL` | no | voice `api_client.py` | default `http://127.0.0.1:8000` |
 | `VOICE_SLM_MODEL` | no | voice `config.py` | default 1.5B Q5; swap for 0.5B Q4 to trade accuracy for speed |
-| `VOICE_WAKE_WORD` | no | voice `wake_word.py` | bundled name or `.onnx` path |
+| `VOICE_WAKE_WORD` | no | voice `wake_word.py` | default `models/hey_eevee.onnx`. A heed `.onnx` (sidecar beside it), an openWakeWord `.onnx`, or a bundled name |
+| `VOICE_WAKE_WORD_META` | no | voice `wake_heed.py` | sidecar path override; empty = derive from the model name |
+| `VOICE_WW_THRESHOLD` | no | voice `wake_word.py` | UNSET = use the model's own (0.603 for hey eevee). 0.5 is the openWakeWord default only |
+| `VOICE_WW_MEL_SCALE` | no | voice `wake_heed.py` | `htk` (default) or `slaney`. Only for a preprocessing mismatch |
+| `VOICE_WW_MEL_NORM` | no | voice `wake_heed.py` | `none` (default) or `slaney` |
+| `VOICE_WW_LOG_BASE` | no | voice `wake_heed.py` | `e` (default) or `10` |
+| `VOICE_WW_NOTCH_Q` | no | voice `wake_heed.py` | default 30 |
 | `VOICE_FASTPATH` | no | voice `fastpath.py` | default true; false forces every utterance through the SLM |
 | `VOICE_SLM_ENABLED` | no | voice `pipeline.py` | default true; false saves ~1.2GB RSS |
 | `VOICE_VERBOSE` | no | voice `config.py` | DEBUG logs with per-stage timings |
@@ -908,6 +950,10 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-15 | wake word = "hey eevee" heed export, own frontend in `wake_heed.py` | USER supplied the model. openWakeWord cannot load it: different input contract (log-mel vs its own embedding frontend), so the sidecar's chain had to be reimplemented on numpy+scipy rather than configured |
+| 2026-10-15 | engine chosen by sidecar presence, not an env var | one less thing to set wrong; `hey_jarvis` and openWakeWord exports keep working untouched |
+| 2026-10-15 | threshold defaults to the sidecar's, not 0.5 | 0.603 is what the model was calibrated at; a hardcoded default would silently detune it |
+| 2026-10-15 | audio devices pinned by udev `ATTR{id}`, not index or vendor string | USER: the mic and speaker are permanent. A fixed card name survives replugs and cannot go ambiguous the way a `USB` substring does |
 | 2026-10-04 | header name `X-API-Key` | conventional for static shared secrets |
 | 2026-10-04 | flat imports in each app | container copies the app dir to /app root |
 | 2026-10-04 | compose build context = repo root | Dockerfiles must reach apps/<name>/ |
@@ -977,6 +1023,13 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-15 macOS, onnxruntime 1.31 venv: wake_heed on hey_eevee_model/
+     wake.onnx -> mel tensor (1,40,101), MATCHING the shape the export's own
+     README documents. Negatives behave: white noise peak prob 0.052, 440Hz
+     tone 0.021, silence skipped entirely by the energy gate (prob 0.0).
+     Model cost 0.26 ms/frame on a desktop CPU.
+     NOT VERIFIED: a positive clip. No 'hey eevee' recording available here,
+     so the unpinned mel conventions remain ESTIMATED, not measured."
   - "[suite since deleted] apps/voice logic tests -> 55 passed"
       covered: fastpath hits/misses/pruning/filler, GBNF dash-last regression
   - "[suite since deleted] apps/backend logic tests -> 13 passed"

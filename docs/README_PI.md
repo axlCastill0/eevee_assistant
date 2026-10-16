@@ -267,6 +267,110 @@ Two things that trip people up here:
   channel conversion. `hw` is raw hardware and will reject `-f cd`
   (44.1 kHz stereo) on a mic that only does, say, 48 kHz mono.
 
+### Lock the devices in place
+
+Do this once, after the mic and speaker you intend to keep are plugged in. It
+survives reboots, replugs and a USB device enumerating in a different order --
+all of which otherwise silently move the card index and leave the pipeline
+recording from nothing.
+
+Four things get pinned: the card *name*, the ALSA `default`, the mixer levels,
+and USB power management.
+
+**1. Give each card a fixed name.** Find the USB ids:
+
+```bash
+cat /proc/asound/cards     # current card numbers and names
+lsusb                      # ID vvvv:pppp per device
+```
+
+Match each audio device to its `ID vvvv:pppp`, then write a udev rule that
+renames its ALSA card regardless of enumeration order:
+
+```bash
+sudo tee /etc/udev/rules.d/85-eevee-audio.rules >/dev/null <<'EOF'
+# Substitute your own idVendor/idProduct from `lsusb`.
+SUBSYSTEM=="sound", ACTION=="add", ATTRS{idVendor}=="0d8c", ATTRS{idProduct}=="0014", ATTR{id}="eeveemic"
+SUBSYSTEM=="sound", ACTION=="add", ATTRS{idVendor}=="1b3f", ATTRS{idProduct}=="2008", ATTR{id}="eeveespk"
+EOF
+sudo udevadm control --reload
+sudo reboot
+```
+
+`ATTR{id}` is the ALSA card name: letters and digits only, 15 characters max,
+and it must not start with a digit. After the reboot `cat /proc/asound/cards`
+shows `eeveemic` and `eeveespk` instead of two cards both called `Device`.
+
+Two identical USB devices share one vendor/product pair, so a rule keyed on
+those cannot tell them apart. Key on the physical port instead -- plug each
+into the port it will live in and use `KERNELS=="1-1.2"` (from
+`udevadm info -a -p /class/sound/card1 | grep KERNELS`) in place of the
+`ATTRS{id*}` pair. The device is then pinned to the socket, not the serial.
+
+**2. Point ALSA's `default` at them by name**, so every ad-hoc `arecord` /
+`aplay` / `speaker-test` on the host works without `-D`:
+
+```bash
+sudo tee /etc/asound.conf >/dev/null <<'EOF'
+pcm.!default {
+    type asym
+    playback.pcm "plughw:CARD=eeveespk,DEV=0"
+    capture.pcm  "plughw:CARD=eeveemic,DEV=0"
+}
+ctl.!default { type hw; card eeveespk }
+EOF
+```
+
+**3. Tell the pipeline the names, not indexes.** In `infra/docker/.env`:
+
+```ini
+VOICE_INPUT_DEVICE=eeveemic
+VOICE_OUTPUT_DEVICE=eeveespk
+```
+
+`config.resolve_device()` treats a non-numeric value as a case-insensitive
+substring of the PortAudio device name, which carries the ALSA card name
+(`eeveemic: USB Audio (hw:1,0)`). Because the names are now unique, the
+substring can only match one device -- the warning about an ambiguous match
+will never fire again. An index would still be wrong after the next replug, so
+do not go back to one.
+
+**4. Freeze the mixer levels.** Capture gain matters more here than anywhere
+else: the wake word was calibrated at a particular input level, and a mic that
+comes back at a different gain either stops triggering or triggers constantly.
+
+```bash
+alsamixer -c eeveemic      # set Mic/Capture gain, press M to unmute
+alsamixer -c eeveespk      # set playback volume
+sudo alsactl store         # writes /var/lib/alsa/asound.state
+```
+
+`alsa-restore.service` replays that file on every boot. Re-run `alsactl store`
+after any deliberate change, or the next reboot undoes it.
+
+**5. Stop USB autosuspend from dropping the mic.** An always-on mic that goes
+idle between wake words can be suspended by the kernel and come back as a new
+device. Append to the single line in `/boot/firmware/cmdline.txt`:
+
+```
+usbcore.autosuspend=-1
+```
+
+**Verify after a reboot**, in this order -- each step fails differently:
+
+```bash
+cat /proc/asound/cards                                   # names, not "Device"
+arecord -d 3 -f cd /tmp/t.wav && aplay /tmp/t.wav        # host default works
+cd infra/docker && docker compose restart voice
+docker compose exec voice python -m voice_assistant.devices   # names visible
+docker compose logs -f voice                             # "Listening for wake word"
+```
+
+If the container lists no device matching the name, the rule applied on the
+host but the container was started before it -- restart it. If the host sees no
+`eevee*` card at all, the udev rule did not match: re-check `lsusb` against the
+ids in the rule.
+
 ### If `default` is broken
 
 A failure that looks like this means ALSA's `default` device is misconfigured,

@@ -82,6 +82,9 @@ VAD_NATIVE_FRAME = 512 * DOWNSAMPLE
 # ============================================================================
 # DETECTION THRESHOLDS
 # ============================================================================
+# Left unset, each model decides: a heed export carries the threshold it was
+# calibrated at in its sidecar. This default only applies to openWakeWord.
+WW_THRESHOLD_IS_SET = bool(os.environ.get("VOICE_WW_THRESHOLD", "").strip())
 WW_THRESHOLD = _float("VOICE_WW_THRESHOLD", 0.5)
 VAD_SPEECH_THRESHOLD = _float("VOICE_VAD_THRESHOLD", 0.5)
 
@@ -111,10 +114,20 @@ MODEL_DIR = _str("VOICE_MODEL_DIR", "models")
 
 VAD_MODEL_PATH = _str("VOICE_VAD_MODEL", f"{MODEL_DIR}/silero_vad.onnx")
 
-# openWakeWord bundles "hey_jarvis". Point this at a .onnx path to use a
-# custom-trained word instead — openWakeWord accepts either a bundled name or
-# a filesystem path.
-WAKE_WORD_NAME = _str("VOICE_WAKE_WORD", "hey_jarvis")
+# The "hey eevee" model, a heed export: models/hey_eevee.onnx plus its
+# models/hey_eevee.json sidecar. Install both with
+# scripts/install-wake-model.sh (it copies them out of hey_eevee_model/).
+#
+# Other accepted values:
+#   hey_jarvis               an openWakeWord bundled name
+#   models/my_word.onnx      an openWakeWord export (no .json beside it)
+# wake_word.make_detector() picks the engine by looking for the sidecar, so
+# nothing else has to be configured when switching.
+WAKE_WORD_NAME = _str("VOICE_WAKE_WORD", f"{MODEL_DIR}/hey_eevee.onnx")
+
+# Only needed if the sidecar is not named after the model (hey_eevee.onnx ->
+# hey_eevee.json). Empty means "derive it".
+WAKE_WORD_META = _str("VOICE_WAKE_WORD_META", "")
 
 WHISPER_SIZE = _str("VOICE_WHISPER_SIZE", "tiny.en")
 WHISPER_COMPUTE_TYPE = _str("VOICE_WHISPER_COMPUTE", "int8")

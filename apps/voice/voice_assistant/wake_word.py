@@ -1,7 +1,15 @@
 """Wake-word detection stage.
 
-Wraps openWakeWord so the pipeline never touches the ONNX model directly.
-Includes a cooldown to suppress duplicate triggers from one utterance.
+Two model formats are supported and `make_detector()` picks between them:
+
+- a `heed` export (a .onnx with a .json sidecar beside it) -- the "hey eevee"
+  model this project ships. Handled by `wake_heed`, which owns its own
+  preprocessing because the model takes log-mel features directly.
+- an openWakeWord model, bundled by name (`hey_jarvis`) or a plain .onnx with
+  no sidecar. Handled by `WakeWordDetector` below.
+
+Both expose the same two methods, `process(frame) -> (triggered, score)` and
+`reset()`, so the pipeline never learns which one it got.
 """
 import logging
 import os
@@ -9,12 +17,46 @@ import os
 import numpy as np
 
 from . import config
+from .wake_heed import HeedWakeWordDetector, is_heed_model
 
 log = logging.getLogger("wakeword")
 
 
+def make_detector(wake_word_name: str = None, threshold: float = None):
+    """Build the detector the configured model needs.
+
+    `threshold` of None means "use the model's own": a heed export carries the
+    threshold it was calibrated at in its sidecar, which beats any default we
+    could pick here. Setting VOICE_WW_THRESHOLD overrides it.
+    """
+    name = config.WAKE_WORD_NAME if wake_word_name is None else wake_word_name
+    if threshold is None and config.WW_THRESHOLD_IS_SET:
+        threshold = config.WW_THRESHOLD
+
+    _cap_threads()
+    if is_heed_model(name):
+        return HeedWakeWordDetector(name, threshold=threshold,
+                                    meta_path=config.WAKE_WORD_META or None)
+    return WakeWordDetector(
+        name, threshold=config.WW_THRESHOLD if threshold is None else threshold)
+
+
+def _cap_threads() -> None:
+    """Hold the always-on models to one thread each.
+
+    Wake word and VAD run on every 80 ms / 32 ms frame forever. Their work
+    is tiny, so onnxruntime's default thread fan-out costs more in handoff
+    than it saves, and it steals cores from Whisper and the SLM.
+
+    Must run before onnxruntime is imported anywhere: it reads these at import.
+    """
+    n = str(config.ALWAYS_ON_THREADS)
+    os.environ.setdefault("OMP_NUM_THREADS", n)
+    os.environ.setdefault("ORT_NUM_THREADS", n)
+
+
 class WakeWordDetector:
-    """Detects the configured wake word in 16 kHz int16 frames.
+    """openWakeWord-backed detection in 16 kHz int16 frames.
 
     Frames must be exactly 1280 samples (80 ms at 16 kHz) — openWakeWord's
     melspectrogram frontend is built around that size.
@@ -30,7 +72,7 @@ class WakeWordDetector:
         # Import here, not at module scope: openWakeWord pulls in onnxruntime
         # and reads env vars at import time, so the thread caps below must be
         # set first.
-        self._cap_threads()
+        _cap_threads()
         from openwakeword.model import Model as OWWModel
 
         self.threshold = threshold
@@ -50,18 +92,6 @@ class WakeWordDetector:
 
         self.model = OWWModel(wakeword_models=models, inference_framework="onnx")
         log.info("Wake word %r loaded (threshold=%.2f)", wake_word_name, threshold)
-
-    @staticmethod
-    def _cap_threads() -> None:
-        """Hold the always-on models to one thread each.
-
-        Wake word and VAD run on every 80 ms / 32 ms frame forever. Their work
-        is tiny, so onnxruntime's default thread fan-out costs more in handoff
-        than it saves, and it steals cores from Whisper and the SLM.
-        """
-        n = str(config.ALWAYS_ON_THREADS)
-        os.environ.setdefault("OMP_NUM_THREADS", n)
-        os.environ.setdefault("ORT_NUM_THREADS", n)
 
     def process(self, chunk_16k: np.ndarray) -> tuple[bool, float]:
         """Process one 1280-sample frame. Returns (triggered, max_score)."""

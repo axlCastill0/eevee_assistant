@@ -49,7 +49,9 @@ Edit `infra/docker/.env`:
 - `API_KEY` — shared secret, used by both containers
 - `AUDIO_GID` — from step 3
 - `VOICE_INPUT_DEVICE` / `VOICE_OUTPUT_DEVICE` — a substring of the device
-  name, not an index. Names survive reboots and replugs; indexes do not.
+  name, not an index. Names survive reboots and replugs; indexes do not. For
+  permanently attached hardware, pin the card names first: see "Lock the
+  devices in place" in `docs/README_PI.md`.
 
 ## 5. Download the models
 
@@ -68,6 +70,20 @@ the container at `/app/models`:
 
 openWakeWord (~50 MB) and Whisper `tiny.en` (~75 MB) are **baked into the
 image** instead, so first boot needs no network.
+
+The wake word itself is not downloaded either — it ships in the repo. Install
+it into the same directory:
+
+```bash
+./scripts/install-wake-model.sh
+```
+
+| File | Size | Purpose |
+|---|---|---|
+| `hey_eevee.onnx` | 44 KB | "hey eevee" wake word |
+| `hey_eevee.json` | 2 KB | its threshold + preprocessing constants (**required**) |
+
+See section 13.
 
 ## 6. Run
 
@@ -421,14 +437,86 @@ Carried over from the prototype, all learned the hard way:
 
 ---
 
-## 13. Changing the wake word
+## 13. The wake word
 
-`hey_jarvis` is an openWakeWord bundled model. To use a custom-trained one:
+The default is **"hey eevee"**, a `heed` export that lives in the repo at
+`hey_eevee_model/` (44 KB). Install it into `models/`:
 
-1. Train with openWakeWord's notebook; you get a `.onnx` file.
-2. Drop it in `models/`.
-3. Set `VOICE_WAKE_WORD=models/my_word.onnx` in `infra/docker/.env`.
-4. `docker compose restart voice`.
+```bash
+./scripts/install-wake-model.sh
+cd infra/docker && docker compose restart voice
+```
 
-`wake_word.py` treats a value containing a path separator or ending in `.onnx`
-as a file and checks it exists; anything else is treated as a bundled name.
+That copies `wake.onnx` -> `models/hey_eevee.onnx` and `wake.json` ->
+`models/hey_eevee.json`, which is where `VOICE_WAKE_WORD` already points. No
+`.env` change and no image rebuild: `models/` is a bind mount.
+
+**Both files are required.** The `.json` is not documentation -- it carries the
+calibrated threshold (0.603), the mel parameters, the filter cut-offs and the
+trigger/energy-gate constants that `wake_heed.py` reads at startup. The model
+without its sidecar refuses to load.
+
+`wake.int8.onnx` is also in the export. It is half the size but *slower* on the
+Pi 5: INT8 pays off on an NPU, and quantize/dequantize overhead is a net loss
+on an A76 CPU. Install it only to compare (`WAKE_VARIANT=int8
+./scripts/install-wake-model.sh`).
+
+### Why it is not loaded through openWakeWord
+
+openWakeWord models consume the output of openWakeWord's own
+melspectrogram+embedding frontend. A heed export consumes log-mel features
+directly -- input `mel`, shape `(1, 40, 101)` -- so the two formats are not
+interchangeable and pointing `VOICE_WAKE_WORD` at a heed `.onnx` under the old
+code would have failed to load.
+
+`wake_word.make_detector()` therefore picks the engine by looking for the
+sidecar: a `.onnx` with a matching `.json` beside it goes to
+`wake_heed.HeedWakeWordDetector`, anything else to the openWakeWord wrapper.
+Both are driven identically by the pipeline, so switching costs one env var:
+
+| `VOICE_WAKE_WORD` | Engine |
+|---|---|
+| `models/hey_eevee.onnx` (+ `.json`) | heed — the default |
+| `hey_jarvis` | openWakeWord, bundled in the image |
+| `models/my_word.onnx` (no `.json`) | openWakeWord, custom export |
+
+### Preprocessing, and the one risk in it
+
+`wake_heed.py` reimplements the chain `wake.json` mandates, in order:
+causal high-pass (100 Hz, 8th-order Butterworth) plus 50/60 Hz mains notches
+with biquad state retained across frames; peak normalise to -3 dBFS; log-mel
+(40 bins, 400-sample Hann window in a 512-point FFT, hop 160, centred and
+reflect-padded, giving exactly the 101 frames the graph expects); then CMN.
+**Skipping CMN makes the model wildly inaccurate**, which is the trap worth
+knowing about if this is ever ported.
+
+Four conventions are *not* pinned down by the sidecar: the mel scale, the
+filterbank normalisation, the log base and the notch Q. The defaults here are
+what torchaudio does (HTK mel, unnormalised triangles, natural log) because the
+export is a torch 2.11 graph, and they produce the documented tensor shape and
+near-zero scores on noise, tones and silence. They are not proof of a match on
+a *positive* clip. Confirm that with a recording of the phrase:
+
+```bash
+docker compose exec voice python -m voice_assistant.wake_check /app/clip.wav
+```
+
+It prints the peak probability against the threshold. If a clip the trainer
+scored high comes back low, flip one convention at a time in
+`infra/docker/.env` — `VOICE_WW_MEL_SCALE=slaney`, `VOICE_WW_MEL_NORM=slaney`,
+`VOICE_WW_LOG_BASE=10` — and re-run.
+
+### Tuning
+
+- `VOICE_WW_THRESHOLD` overrides the sidecar's 0.603. Leave it unset to use
+  the calibrated value; raise it if the word fires on other speech, lower it if
+  it misses.
+- The trigger needs 2 consecutive frames over threshold and then suppresses for
+  0.7 s. Both come from `wake.json`, not from the environment.
+- The energy gate (RMS below -55 dBFS, or under 15 % of energy in 100–7000 Hz)
+  skips the model entirely, so a quiet room costs one FFT per 80 ms instead of
+  an inference. It is measured on unfiltered audio, deliberately: the high-pass
+  has already removed the rumble that would prove the energy is not speech.
+
+Cost on the model itself is ~0.26 ms per 80 ms frame on a desktop CPU, so this
+stays far inside the always-on budget on a Pi 5.

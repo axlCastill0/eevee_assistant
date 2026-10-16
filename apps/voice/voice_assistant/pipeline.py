@@ -25,7 +25,7 @@ from .recorder import CommandRecorder
 from .stt import load_whisper, transcribe
 from .tts import Speaker
 from .vad import SileroVAD
-from .wake_word import WakeWordDetector
+from .wake_word import make_detector
 
 log = logging.getLogger("pipeline")
 
@@ -53,7 +53,7 @@ class VoiceAssistant:
         self.activity = StateReporter(self.api)
         self.activity.start()
 
-        self.wake_word = WakeWordDetector()
+        self.wake_word = make_detector()
         self.vad = SileroVAD()
         self.recorder = CommandRecorder(self.vad)
         self.whisper = load_whisper()
