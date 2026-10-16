@@ -2,14 +2,29 @@
 
     docker compose exec voice python -m voice_assistant.devices
 
-Indexes differ between the host and the container, and change across replugs.
-Prefer setting VOICE_INPUT_DEVICE / VOICE_OUTPUT_DEVICE to a name substring
-shown here rather than an index.
+Prints both halves of the mapping, because they are not the same thing and
+confusing them is the usual cause of "no device matching ...":
+
+- ALSA cards, with their **id** in brackets. A udev ATTR{id} rule sets this.
+- PortAudio devices, whose **names** come from the card's name field (the USB
+  descriptor), which udev does not touch. The `(hw:N,M)` suffix is the only
+  link back to the card number.
+
+So for a card pinned as `eeveemic`, set VOICE_INPUT_DEVICE=CARD=eeveemic --
+not `eeveemic`, which matches no device name.
 """
 import sounddevice as sd
 
 
 def main() -> None:
+    try:
+        with open("/proc/asound/cards") as fh:
+            print("ALSA cards (/proc/asound/cards) -- id is in brackets:")
+            print(fh.read())
+    except OSError as exc:
+        print(f"could not read /proc/asound/cards: {exc}\n")
+
+    print("PortAudio devices -- match these by name substring, or by card id:")
     print(sd.query_devices())
     print()
     try:

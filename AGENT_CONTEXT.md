@@ -298,6 +298,9 @@ wake_word: "hey eevee" (heed export, models/hey_eevee.onnx) DEFAULT 2026-10-15
     VOICE_WW_NOTCH_Q. NOT yet confirmed against a positive clip - only against
     noise/tone/silence negatives. Use wake_check.py on a real "hey eevee"
     recording to close that gap.
+  SURPRISE COST (2026-10-15, real Pi): first SLM warmup after a rebuild took
+    216 s, not the ~2 s a warm one takes -- 1.2 GB of GGUF being read off the
+    SD card with a cold page cache. Not a hang. Subsequent boots are fast.
   window: detector keeps its own 1s ring buffer, so frame length is free; the
     pipeline feeds 1280 samples (80ms), so the model runs at an 80ms hop.
 
@@ -736,8 +739,8 @@ secrets: never hardcode a key in source, compose, docs, or this file
 |---|---|---|---|
 | `API_KEY` | yes | backend `auth.py`, voice `api_client.py` | shared secret; must match across both |
 | `AUDIO_GID` | yes (Pi) | voice Dockerfile **build arg** | must equal `getent group audio` (29 on Pi OS); changing it needs a rebuild |
-| `VOICE_INPUT_DEVICE` | no | voice `config.py` | index or name substring; default `0` |
-| `VOICE_OUTPUT_DEVICE` | no | voice `config.py` | index or name substring; default `1` |
+| `VOICE_INPUT_DEVICE` | no | voice `config.py` | `CARD=<alsa id>` (best), name substring, or index; default `0` |
+| `VOICE_OUTPUT_DEVICE` | no | voice `config.py` | `CARD=<alsa id>` (best), name substring, or index; default `1` |
 | `VOICE_API_BASE_URL` | no | voice `api_client.py` | default `http://127.0.0.1:8000` |
 | `VOICE_SLM_MODEL` | no | voice `config.py` | default 1.5B Q5; swap for 0.5B Q4 to trade accuracy for speed |
 | `VOICE_WAKE_WORD` | no | voice `wake_word.py` | default `models/hey_eevee.onnx`. A heed `.onnx` (sidecar beside it), an openWakeWord `.onnx`, or a bundled name |
@@ -953,7 +956,8 @@ xterm_is_required:
 | 2026-10-15 | wake word = "hey eevee" heed export, own frontend in `wake_heed.py` | USER supplied the model. openWakeWord cannot load it: different input contract (log-mel vs its own embedding frontend), so the sidecar's chain had to be reimplemented on numpy+scipy rather than configured |
 | 2026-10-15 | engine chosen by sidecar presence, not an env var | one less thing to set wrong; `hey_jarvis` and openWakeWord exports keep working untouched |
 | 2026-10-15 | threshold defaults to the sidecar's, not 0.5 | 0.603 is what the model was calibrated at; a hardcoded default would silently detune it |
-| 2026-10-15 | audio devices pinned by udev `ATTR{id}`, not index or vendor string | USER: the mic and speaker are permanent. A fixed card name survives replugs and cannot go ambiguous the way a `USB` substring does |
+| 2026-10-15 | audio devices pinned by udev `ATTR{id}`, addressed as `CARD=<id>` | USER: the mic and speaker are permanent. The id survives replugs and cannot go ambiguous the way a `USB` substring does. CORRECTION, same day: a card id is NOT a PortAudio device name, so `resolve_device()` had to learn the `CARD=` form (resolved through /proc/asound) -- the first version of the guide told the user to use the bare id and the pipeline exited with "No output device matching 'eeveespk'" |
+| 2026-10-15 | audio devices resolved before any model loads | the same failure surfaced only after a 216 s cold SLM warmup on the Pi. A config error knowable in 50 ms must not cost minutes |
 | 2026-10-04 | header name `X-API-Key` | conventional for static shared secrets |
 | 2026-10-04 | flat imports in each app | container copies the app dir to /app root |
 | 2026-10-04 | compose build context = repo root | Dockerfiles must reach apps/<name>/ |
@@ -1023,6 +1027,11 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-15 macOS, simulated Pi device list (the user's real one, from
+     /proc/asound/cards + PortAudio): CARD=eeveemic -> [0], CARD=eeveespk ->
+     [1], hw:CARD= form, name substring and raw index all resolve correctly;
+     a bare `eeveespk` raises and the message now names CARD=eeveespk as the
+     fix. OPEN: not yet run on the Pi itself."
   - "2026-10-15 macOS, onnxruntime 1.31 venv: wake_heed on hey_eevee_model/
      wake.onnx -> mel tensor (1,40,101), MATCHING the shape the export's own
      README documents. Negatives behave: white noise peak prob 0.052, 440Hz

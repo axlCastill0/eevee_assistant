@@ -48,11 +48,22 @@ def _bool(name: str, default: bool) -> bool:
 # ============================================================================
 # AUDIO DEVICES
 # ============================================================================
-# Indexes from `python -c "import sounddevice as sd; print(sd.query_devices())"`.
-# Inside the container, run:
+# Three accepted forms, in descending order of how well they survive a reboot:
+#
+#   CARD=eeveemic    an ALSA card id, pinned by a udev rule. Resolved through
+#                    /proc/asound, so it holds even if the card number moves.
+#                    THE RIGHT ANSWER for hardware that stays plugged in.
+#   USB Microphone   a case-insensitive substring of the PortAudio device name
+#   0                a raw index -- moves on every replug; debugging only
+#
+# List what the container can see with:
 #   docker compose exec voice python -m voice_assistant.devices
-# Device *names* are more stable than indexes across reboots and replugs; set
-# VOICE_INPUT_DEVICE to a substring of the name to match by name instead.
+#
+# NOTE a udev `ATTR{id}` rule renames the card *id*, which is NOT the name
+# PortAudio reports: that comes from the card's name field, straight off the
+# USB descriptor. So after pinning ids you must use the CARD= form; a name
+# substring of "eeveemic" matches nothing. Learned the hard way on the Pi,
+# 2026-10-15.
 INPUT_DEVICE: str | int = _str("VOICE_INPUT_DEVICE", "0")
 OUTPUT_DEVICE: str | int = _str("VOICE_OUTPUT_DEVICE", "1")
 
@@ -243,20 +254,83 @@ def configure_logging() -> None:
     # more than format here (see PYTHONUNBUFFERED in the Dockerfile).
 
 
+def alsa_card_index(card_id: str) -> int:
+    """ALSA card id -> card number, read from /proc/asound.
+
+    ALSA keeps a symlink per card id (/proc/asound/eeveemic -> card0), and the
+    container shares the host's procfs, so this is readable from inside it.
+    Falls back to parsing /proc/asound/cards, whose lines look like
+    ` 0 [eeveemic       ]: USB-Audio - USB Microphone`.
+    """
+    link = f"/proc/asound/{card_id}"
+    if os.path.islink(link):
+        target = os.path.basename(os.path.realpath(link))   # "card0"
+        if target.startswith("card") and target[4:].isdigit():
+            return int(target[4:])
+
+    try:
+        with open("/proc/asound/cards") as fh:
+            for line in fh:
+                # Only the index line carries brackets; the name line follows.
+                if "[" not in line:
+                    continue
+                number, _, rest = line.strip().partition(" ")
+                name = rest.partition("[")[2].partition("]")[0].strip()
+                if name == card_id and number.isdigit():
+                    return int(number)
+    except OSError:
+        pass
+
+    raise RuntimeError(
+        f"No ALSA card with id {card_id!r}. Cards the container can see:\n"
+        + _read_cards()
+    )
+
+
+def _read_cards() -> str:
+    try:
+        with open("/proc/asound/cards") as fh:
+            return fh.read()
+    except OSError as exc:
+        return f"(could not read /proc/asound/cards: {exc})"
+
+
 def resolve_device(spec: str | int, kind: str) -> int:
     """Resolve a device spec to a sounddevice index.
 
-    `spec` may be a numeric index ("0") or a case-insensitive substring of the
-    device name ("USB Microphone"). Matching by name survives replugs and
-    reboots, which reorder indexes.
+    See the AUDIO DEVICES block above for the three accepted forms.
     """
     import sounddevice as sd
 
     if isinstance(spec, int) or str(spec).strip().lstrip("-").isdigit():
         return int(spec)
 
-    needle = str(spec).lower()
+    raw = str(spec).strip()
     want_input = kind == "input"
+
+    # CARD=<id> / hw:CARD=<id>: resolve the id to a card number, then find the
+    # PortAudio device that wraps it. PortAudio appends the ALSA address to
+    # every hardware device's name -- "USB Microphone: Audio (hw:0,0)" -- which
+    # is the only place the card number appears.
+    if raw.upper().startswith(("CARD=", "HW:CARD=")):
+        card_id = raw.partition("=")[2]
+        index = alsa_card_index(card_id)
+        token = f"(hw:{index},"
+        for idx, dev in enumerate(sd.query_devices()):
+            channels = dev["max_input_channels"] if want_input else dev["max_output_channels"]
+            if channels > 0 and token in dev["name"]:
+                logging.getLogger("config").info(
+                    "%s device %s -> card %d -> [%d] %s",
+                    kind, raw, index, idx, dev["name"],
+                )
+                return idx
+        raise RuntimeError(
+            f"ALSA card {card_id!r} is card {index}, but no PortAudio {kind} "
+            f"device wraps it. Devices:\n{sd.query_devices()}\n\nCards:\n"
+            + _read_cards()
+        )
+
+    needle = raw.lower()
 
     matches = [
         (idx, dev["name"])
@@ -267,7 +341,10 @@ def resolve_device(spec: str | int, kind: str) -> int:
 
     if not matches:
         raise RuntimeError(
-            f"No {kind} device matching {spec!r}. Available devices:\n{sd.query_devices()}"
+            f"No {kind} device matching {spec!r}. Available devices:\n"
+            f"{sd.query_devices()}\n\n"
+            "If that spec is a udev-pinned ALSA card id, it will never match a "
+            f"device name -- use CARD={spec} instead. Cards:\n" + _read_cards()
         )
 
     if len(matches) > 1:

@@ -36,6 +36,15 @@ class VoiceAssistant:
     def __init__(self):
         log.info("Loading pipeline components...")
 
+        # Audio devices FIRST, before anything slow. Resolution is a config
+        # error -- a wrong name or an unplugged device -- and it exits the
+        # process. Finding that out after the SLM warmup means waiting minutes
+        # (216 s on the Pi, cold) for a failure that is knowable in 50 ms.
+        self.input_device = config.resolve_device(config.INPUT_DEVICE, "input")
+        self.output_device = config.resolve_device(config.OUTPUT_DEVICE, "output")
+        log.info("Audio devices resolved: input [%d], output [%d]",
+                 self.input_device, self.output_device)
+
         # The API is contacted first so the intent catalogue can shape the
         # grammar and the fast path. A failure here is survivable.
         self.api = BackendClient()
@@ -68,8 +77,7 @@ class VoiceAssistant:
         else:
             log.warning("SLM disabled; unmatched utterances will be 'unknown'")
 
-        self.speaker = Speaker()
-        self.input_device = config.resolve_device(config.INPUT_DEVICE, "input")
+        self.speaker = Speaker(output_device=self.output_device)
 
         log.info("Pipeline ready.")
 

@@ -321,19 +321,46 @@ ctl.!default { type hw; card eeveespk }
 EOF
 ```
 
-**3. Tell the pipeline the names, not indexes.** In `infra/docker/.env`:
+**3. Tell the pipeline the card ids.** In `infra/docker/.env`:
 
 ```ini
-VOICE_INPUT_DEVICE=eeveemic
-VOICE_OUTPUT_DEVICE=eeveespk
+VOICE_INPUT_DEVICE=CARD=eeveemic
+VOICE_OUTPUT_DEVICE=CARD=eeveespk
 ```
 
-`config.resolve_device()` treats a non-numeric value as a case-insensitive
-substring of the PortAudio device name, which carries the ALSA card name
-(`eeveemic: USB Audio (hw:1,0)`). Because the names are now unique, the
-substring can only match one device -- the warning about an ambiguous match
-will never fire again. An index would still be wrong after the next replug, so
-do not go back to one.
+The `CARD=` prefix matters. A udev `ATTR{id}` rule renames the card **id**,
+which is what appears in brackets in `/proc/asound/cards`. PortAudio does not
+report that id anywhere: the device names it shows come from the card's *name*
+field, straight off the USB descriptor, and udev leaves those alone. So after
+step 1 the container still lists
+
+```
+  0 USB Microphone: Audio (hw:0,0), ALSA (2 in, 0 out)
+< 1 USB2.0 Device: Audio (hw:1,0), ALSA (0 in, 2 out)
+```
+
+and a bare `eeveespk` matches nothing — the pipeline exits with
+`No output device matching 'eeveespk'`.
+
+`CARD=<id>` avoids that: `config.resolve_device()` reads the card number for
+that id out of `/proc/asound` (shared with the host, so it works inside the
+container) and then picks the PortAudio device whose name carries the matching
+`(hw:N,…)` address. The id is pinned, so the lookup holds through replugs even
+though the card number does not.
+
+A plain name substring (`USB Microphone`) also works and is better than an
+index, but it is only unique by luck — two devices of the same model report the
+same name, and `USB` alone matches every USB audio device on the bus. Prefer
+`CARD=`.
+
+Check the mapping any time with:
+
+```bash
+docker compose exec voice python -m voice_assistant.devices
+```
+
+which prints the ALSA cards and the PortAudio devices side by side, precisely
+because confusing the two is the usual cause of a no-matching-device failure.
 
 **4. Freeze the mixer levels.** Capture gain matters more here than anywhere
 else: the wake word was calibrated at a particular input level, and a mic that
@@ -1090,14 +1117,29 @@ captures with `arecord` first.
 Constantly: raise it, and check the speaker is not feeding back into the mic.
 Increasing `VOICE_POST_TTS_GRACE_MS` helps if it retriggers on its own replies.
 
-### "No input device matching ..."
+### "No input device matching ..." / "No output device matching ..."
 
-The device name in `.env` does not match. The error prints the full device
-list; copy a substring from it:
+The spec in `.env` matches nothing. Print both halves of the mapping:
 
 ```bash
 docker compose exec voice python -m voice_assistant.devices
 ```
+
+The common cause is a **udev-pinned card id used as a device name**. Those are
+different namespaces: a rule setting `ATTR{id}="eeveespk"` changes the id in
+`/proc/asound/cards`, while PortAudio keeps reporting the USB descriptor's name
+(`USB2.0 Device: Audio (hw:1,0)`). Address the id explicitly instead:
+
+```ini
+VOICE_OUTPUT_DEVICE=CARD=eeveespk
+```
+
+Otherwise copy a name substring out of the device list. Either way the error
+message now prints the ALSA cards next to the PortAudio devices, so the two
+can be compared without going back to the host.
+
+Device resolution runs before any model loads, so this failure costs seconds,
+not the minutes the SLM warmup takes.
 
 ### Build runs out of memory or disk
 
