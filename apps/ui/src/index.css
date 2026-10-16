@@ -70,10 +70,25 @@
   --text-dim: #9aa3af;
   --text-faint: #6b7280;
 
-  /* Accent — a single hue, used for focus, active states and the clock. */
-  --accent: #4c8dff;
-  --accent-dim: #2a5db8;
-  --accent-wash: rgba(76, 141, 255, 0.1);
+  /* Accent — a single hue, used for focus, active states and controls.
+     Red since 2026-10-16 (USER).
+
+     It shares a family with --down below. That is tolerable because nothing
+     relies on "is it red" alone to mean "is it broken": a down service is
+     always labelled in words, always carries a status dot, and is the only
+     one of the two that pulses -- the accent never animates. Where the two
+     WOULD have been read against each other, the element uses --info
+     instead; see the voice pill. */
+  --accent: #ff3b3b;
+  --accent-dim: #a81f1f;
+  --accent-wash: rgba(255, 59, 59, 0.12);
+
+  /* Calm, non-urgent blue. This WAS the accent until 2026-10-16; it stayed as
+     its own token because the voice pill's `ready` state used it and must not
+     follow the accent into red -- `speaking` is already red there, and the
+     panel's one rule about red is that it means "do not talk over this". */
+  --info: #4c8dff;
+  --info-wash: rgba(76, 141, 255, 0.1);
 
   /* Status */
   --ok: #3ecf8e;
@@ -148,9 +163,12 @@
   --text-dim: #5c6471;
   --text-faint: #8b93a1;
 
-  --accent: #2563eb;
-  --accent-dim: #93b4fb;
-  --accent-wash: rgba(37, 99, 235, 0.08);
+  --accent: #d32020;
+  --accent-dim: #f0a3a3;
+  --accent-wash: rgba(211, 32, 32, 0.09);
+
+  --info: #2563eb;
+  --info-wash: rgba(37, 99, 235, 0.08);
 
   --ok: #17946b;
   --ok-wash: rgba(23, 148, 107, 0.09);

@@ -78,6 +78,7 @@ apps/
                       route "systems"), Settings.tsx
     src/components/RingingBanner.tsx  plays the mp3, Stop button; in the SHELL
     src/components/StatusIcons.tsx    top-bar timer/alarm icons
+    (ThemeToggle.tsx was DELETED 2026-10-16: the control moved to Settings)
     src/components/Sidebar.tsx   view switcher rail
     src/lib/useRoute.ts          hand-written hash router (no react-router)
     src/lib/useSpotify.ts        1Hz poll + local progress interpolation
@@ -440,6 +441,30 @@ theme: still per-browser localStorage, NOT a server setting. A theme belongs
   to a display, and `set_theme` by voice writes the same local store. The
   Settings page shows the control next to two server-side ones anyway,
   because that is where a person looks for it.
+```
+
+## ui gotchas
+
+```yaml
+unstable_callback_restarted_audio:
+  SYMPTOM (real, on the Pi 2026-10-16): a timer fired, the ringing banner
+  appeared, a "Press play" button flickered once a second, and NO SOUND
+  played.
+  CAUSE: RingingBanner's audio effect depended on its `stop` prop. App passed
+  a fresh arrow every render and the component re-renders on every 1Hz poll,
+  so the <audio> element was torn down and rebuilt once a second. Each play()
+  was aborted by its own cleanup; the rejection was treated as an autoplay
+  block, which is what drew the Play button.
+  FIX: the effect depends only on [kind, file]; the callback lives in a ref;
+  the rejection handler only treats NotAllowedError as a policy block;
+  useClockState returns the memoised `refresh` itself rather than a fresh
+  arrow, and App wraps its stop handlers in useCallback.
+  RULE: anything long-lived that an effect owns -- audio, sockets, timers --
+  must not have a per-render callback in its dependency array.
+
+sound_cache: /clock/sounds sends Cache-Control: max-age=3600, so a repeat
+  test shows ZERO server hits and still plays. Do not read "no request in the
+  log" as "no audio"; use an untouched filename to force a real fetch.
 ```
 
 ## container gotchas
@@ -1117,6 +1142,8 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | accent is RED (`--accent`), status `--down` stays red too | USER preference. Tolerable because nothing reads "red" alone as "broken": a down service is always labelled, carries a status dot, and pulses -- the accent never animates |
+| 2026-10-16 | voice pill's `ready` pinned to a new `--info` token, not `--accent` | `speaking` is red and means "do not talk over this". With a red accent, `ready` would have been the same colour, so the old blue survives as its own token |
 | 2026-10-16 | wake word back to `hey_jarvis` | USER: "hey eevee" fired on non-speech room noise even at 0.9. The heed engine stays in the code and the model stays installable -- only the default moved |
 | 2026-10-16 | five music intents (play/pause/next/previous/restart) | USER. `restart` is a seek to zero rather than Spotify's device-dependent `/previous`, so "play it again" is never a coin flip |
 | 2026-10-16 | every Spotify failure gets its own spoken sentence | "no Premium" and "nothing is playing anywhere" need opposite reactions from the person standing there; one generic apology would be useless. Mapped once in `intents._music_problem` so five handlers cannot drift |
@@ -1227,6 +1254,14 @@ passed:
      NOT VERIFIED: audible playback (no speaker here), the voice path end to
      end on the Pi, and anything about Chromium's autoplay policy in kiosk
      mode."
+  - "2026-10-16 macOS, real backend + browser at 1024x600: after the audio
+     fix, a fired timer fetches its sound EXACTLY ONCE (206 Partial Content),
+     plays without any gesture, and auto-stops when the file ends (one
+     POST /clock/timers/stop-all). No Play button, no console warnings, no
+     repeated fetches -- the pre-fix behaviour was a fetch and an abort per
+     second. Red accent verified on the Dashboard, Settings and the sidebar.
+     NOT VERIFIED: Chromium's kiosk autoplay policy on the Pi (the browser
+     pane here has its own), and audible output (no speaker)."
   - "2026-10-16 macOS: music intents exercised directly against a stubbed
      spotify module -- all five succeed and each of the seven failure statuses
      (plus an unknown one) produces its own distinct sentence; 'pause' on

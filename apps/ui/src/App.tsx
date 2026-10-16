@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { DetailSheet } from './components/DetailSheet'
 import { RingingBanner } from './components/RingingBanner'
@@ -31,6 +31,18 @@ export default function App() {
 
   const [openName, setOpenName] = useState<string | null>(null)
   const [screenOff, setScreenOff] = useState(false)
+
+  // Stable identities: RingingBanner keys its audio effect on what it is
+  // given, and a fresh arrow each render restarts the sound every poll.
+  const { refresh: refreshClock } = clock
+  const stopTimers = useCallback(
+    () => void stopRingingTimers().then(refreshClock),
+    [refreshClock],
+  )
+  const dismissAlarm = useCallback(
+    () => void stopAlarm().then(refreshClock),
+    [refreshClock],
+  )
 
   // Commands from the assistant: theme changes and screen blanking. Keyed on
   // the command object's identity, which is fresh for every command, so
@@ -157,8 +169,8 @@ export default function App() {
         alarm={clock.ringingAlarm}
         timerSound={clock.data?.settings.timer_sound ?? ''}
         alarmSound={clock.data?.settings.alarm_sound ?? ''}
-        onStopTimers={() => void stopRingingTimers().then(clock.refresh)}
-        onStopAlarm={() => void stopAlarm().then(clock.refresh)}
+        onStopTimers={stopTimers}
+        onStopAlarm={dismissAlarm}
       />
 
       <ScreenVeil on={screenOff} onDismiss={() => setScreenOff(false)} />

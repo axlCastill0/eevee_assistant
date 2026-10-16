@@ -47,6 +47,18 @@ export function RingingBanner({
   const file = kind === 'alarm' ? alarmSound : timerSound
   const stop = kind === 'alarm' ? onStopAlarm : onStopTimers
 
+  // The effect below must depend ONLY on what identifies the sound. `stop` is
+  // a fresh closure on every render and this component re-renders on every
+  // poll, so depending on it tore the <audio> element down and rebuilt it
+  // about once a second: each play() was interrupted by its own cleanup,
+  // which rejects, which looked exactly like an autoplay block. The banner
+  // flickered a Play button and nothing was ever audible.
+  // Seen on the Pi 2026-10-16. Keep the callback in a ref instead.
+  const stopRef = useRef(stop)
+  useEffect(() => {
+    stopRef.current = stop
+  }, [stop])
+
   useEffect(() => {
     if (!kind || !file) return
 
@@ -55,23 +67,42 @@ export function RingingBanner({
     // One play-through, then the ringing is over by itself. Looping would
     // mean an alarm nobody is home for plays until the Pi is unplugged.
     element.loop = false
-    element.addEventListener('ended', stop)
 
+    const onEnded = () => stopRef.current()
+    element.addEventListener('ended', onEnded)
+
+    let cancelled = false
     element.play().then(
-      () => setBlocked(false),
-      () => setBlocked(true),   // autoplay policy; the banner becomes the gesture
+      () => {
+        if (!cancelled) setBlocked(false)
+      },
+      (err: unknown) => {
+        if (cancelled) return
+        // Only a real policy refusal should offer the tap-to-play button.
+        // An AbortError means something interrupted the play() -- a teardown,
+        // or a second play() racing it -- and showing "tap to play" for that
+        // is how the flicker above presented itself.
+        const name = err instanceof DOMException ? err.name : ''
+        setBlocked(name === 'NotAllowedError')
+        if (name !== 'NotAllowedError') {
+          console.warn('Ringing sound could not start:', err)
+        }
+      },
     )
 
     return () => {
-      element.removeEventListener('ended', stop)
+      cancelled = true
+      element.removeEventListener('ended', onEnded)
       element.pause()
       element.currentTime = 0
       audio.current = null
+      // Clear it here rather than during render: the next play() sets it
+      // correctly, and `cancelled` stops this teardown's own rejection from
+      // racing that.
       setBlocked(false)
     }
-    // `file` and `kind` only: re-running this on every poll would restart the
-    // song once a second.
-  }, [kind, file, stop])
+    // IDENTITY OF THE SOUND ONLY. Nothing else belongs in here.
+  }, [kind, file])
 
   if (!kind) return null
 

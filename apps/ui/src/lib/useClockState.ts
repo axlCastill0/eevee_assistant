@@ -34,7 +34,7 @@ export interface ClockFeed {
   /** True when an alarm is set to go off within 24 hours. */
   alarmSoon: boolean
   /** Re-poll now. Called after every mutation so the UI never shows a stale
-   *  list for a second after a tap. */
+   *  list for a second after a tap. Stable across renders. */
   refresh: () => void
 }
 
@@ -48,7 +48,7 @@ export function useClockState(): ClockFeed {
   // boot when NTP catches up.
   const receivedAt = useRef(0)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<void> => {
     try {
       const next = await fetchClockState()
       receivedAt.current = performance.now()
@@ -88,7 +88,10 @@ export function useClockState(): ClockFeed {
     ringingTimers: data?.timers.ringing ?? [],
     ringingAlarm: data?.alarms.ringing ?? null,
     alarmSoon: nextFire !== null && nextFire <= 24 * 3600,
-    refresh: () => void refresh(),
+    // `refresh` itself, not a fresh arrow wrapping it: consumers put this in
+    // effect dependency arrays, and a new identity every render is what made
+    // the ringing sound restart once a second.
+    refresh,
   }
 }
 

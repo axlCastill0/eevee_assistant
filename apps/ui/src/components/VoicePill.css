@@ -61,9 +61,13 @@
 
 /* ---- states ------------------------------------------------------------- */
 
+/* --info, NOT --accent: the accent went red on 2026-10-16 and `speaking`
+   below is already red. "Armed and waiting" and "I have the floor" have to be
+   tellable apart from across the room, so this keeps the calm blue it always
+   had. */
 .voicepill[data-state='ready'] {
-  --vp: var(--accent);
-  --vp-wash: var(--accent-wash);
+  --vp: var(--info);
+  --vp-wash: var(--info-wash);
 }
 
 .voicepill[data-state='listening'] {

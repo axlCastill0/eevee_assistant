@@ -69,7 +69,7 @@ minutes and seconds are.
 ## 3. Design notes
 
 Target: modern developer tooling — Linear, Vercel, Raycast. Restrained neutral
-surfaces, one accent, hairline borders, monospace with tabular figures for
+surfaces, one accent (red since 2026-10-16), hairline borders, monospace with tabular figures for
 every number, short decisive easing. Explicitly not a terminal or a sci-fi HUD.
 
 Scaled for touch:
@@ -275,7 +275,7 @@ average of 1.5s late, which is after you have already spoken.
 
 | colour | state | meaning |
 |---|---|---|
-| blue | `ready` | wake word armed |
+| blue | `ready` | wake word armed (`--info`, **not** `--accent`) |
 | green | `listening` | mic open, talk now (dot pulses) |
 | amber | `thinking` | transcribing and classifying (slower pulse) |
 | red | `speaking` | the assistant has the floor |
@@ -283,6 +283,11 @@ average of 1.5s late, which is after you have already spoken.
 
 Red is not an error. It is the one colour on this panel that means "do not
 talk over this".
+
+`ready` is pinned to its own `--info` token rather than following the accent.
+The accent went red on 2026-10-16 (user preference) and `speaking` is already
+red, so tracking the accent would have made "armed and waiting" and "I have
+the floor" the same colour from across the room.
 
 While thinking, the transcript appears beside the pill. It is the **final**
 transcript, pushed the moment Whisper returns and before classification —
