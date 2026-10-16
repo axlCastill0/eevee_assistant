@@ -67,6 +67,21 @@ def delete_timer(timer_id: str):
     return {"status": "cancelled"}
 
 
+@router.post("/timers/{timer_id}/pause")
+def pause_timer(timer_id: str, paused: bool = Body(..., embed=True)):
+    """Hold or release one timer.
+
+    One endpoint with a boolean rather than /pause and /resume: the panel has
+    a single button whose meaning depends on the timer's current state, and
+    sending the state it WANTS is what makes a double tap harmless. Two verbs
+    would let the UI guess wrong and resume something it meant to pause.
+    """
+    timer = timers.set_paused(timer_id, paused)
+    if timer is None:
+        raise HTTPException(status_code=404, detail="No such timer")
+    return timers.as_dict(timer)
+
+
 @router.post("/timers/stop-all")
 def stop_all_timers():
     """The Stop button on the ringing banner, which does not care which of

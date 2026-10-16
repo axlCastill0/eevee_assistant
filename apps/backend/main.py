@@ -11,7 +11,7 @@ except ImportError:
     pass
 
 from auth import require_api_key
-from routes import clock, screen, spotify, status, voice
+from routes import clock, screen, spotify, status, voice, weather
 
 # Uvicorn configures its own loggers but not the root logger, so module-level
 # loggers (routes.voice, intents) would otherwise be silent.
@@ -44,6 +44,11 @@ app.include_router(spotify.router, prefix="/spotify", tags=["spotify"])
 # that browser has no API key. Protected by the single-use state minted by the
 # key-protected /spotify/login instead. See routes/spotify.py.
 app.include_router(spotify.public_router, prefix="/spotify", tags=["spotify"])
+
+# Its own route rather than a field on /clock/state: a cache miss here blocks
+# on the network, and that poll is the one that rings alarms. See
+# routes/weather.py.
+app.include_router(weather.router, prefix="/weather", tags=["weather"])
 
 @app.get("/", dependencies=[Depends(require_api_key)])
 def root():

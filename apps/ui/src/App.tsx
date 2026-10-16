@@ -14,10 +14,12 @@ import { useRoute } from './lib/useRoute'
 import { useServices } from './lib/useServices'
 import { useTheme } from './lib/useTheme'
 import { useVoiceEvents } from './lib/useVoiceEvents'
-import { Clock } from './views/Clock'
+import { Alarms } from './views/Alarms'
 import { Dashboard } from './views/Dashboard'
+import { Home } from './views/Home'
 import { NowPlaying } from './views/NowPlaying'
 import { Settings } from './views/Settings'
+import { Timers } from './views/Timers'
 
 export default function App() {
   const now = useClock()
@@ -159,12 +161,23 @@ export default function App() {
           <NowPlaying active />
         )}
 
+        {/* The launcher. Timers and alarms are apps behind it now, each with
+            the whole screen -- which is what let both grow controls a finger
+            can actually use (USER DECISION 2026-10-16). */}
         {route === 'dashboard' && (
-          <Clock
+          <Home
             timers={clock.timers}
             alarms={clock.data?.alarms.alarms ?? []}
-            onChanged={clock.refresh}
+            services={data}
           />
+        )}
+
+        {route === 'timers' && (
+          <Timers timers={clock.timers} onChanged={clock.refresh} />
+        )}
+
+        {route === 'alarms' && (
+          <Alarms alarms={clock.data?.alarms.alarms ?? []} onChanged={clock.refresh} />
         )}
 
         {route === 'settings' && (

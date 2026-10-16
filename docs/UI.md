@@ -159,41 +159,65 @@ The music view renders no top bar at all; see below.
 
 ### Routing
 
-Hash routing, hand-written, in `lib/useRoute.ts`. Four views, no params, no
-nested routes: react-router is ~20 KB to replace 30 lines, and every
+Hash routing, hand-written, in `lib/useRoute.ts`. Six routes, no params, no
+nested routes: react-router is ~20 KB to replace 50 lines, and every
 dependency here has to survive an `npm ci` during an image build on the Pi.
 The hash rather than `pushState` because a reload then never 404s, including
 against the dev server.
 
-Adding a view is three edits: a `Route` in `useRoute.ts`, an entry in
-`Sidebar.tsx`'s `ITEMS` (or `FOOTER_ITEMS`), and a branch in `App.tsx`.
+**The rail lists destinations, not routes.** `timers` and `alarms` are real
+routes — a kiosk reload has to come back to the app you were in — but they are
+reached from the launcher's tiles, not from the sidebar, which stays four
+entries. `HOME_APPS` is what keeps Dashboard lit while you are inside one; a
+rail with nothing highlighted reads as "you are nowhere".
+
+Adding a view is three edits: a `Route` in `useRoute.ts`, a branch in
+`App.tsx`, and then either an entry in `Sidebar.tsx`'s `ITEMS` (a destination)
+or a tile in `Home.tsx`'s `appTiles` (an app).
 
 ### Views
 
 **Dashboard** is the default route: it is what the panel is for day to day, so
 an unrecognised hash lands there rather than on the systems grid.
 
-**Dashboard** — timers left, alarms right. The countdowns are the largest type
-on the page, because the question it answers from across the room is "how long
-left". Timers are also settable by voice; alarms are screen-only. Full feature
-notes are in `docs/TIMERS_AND_ALARMS.md`.
+**Dashboard** — the launcher. A glance strip of live state over a grid of app
+tiles.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ TIMERS                     │ ALARMS                  │
-│ [1][3][5][10][15][30] min  │ Mon  7:30 AM     (on )  │
-│ [−]   0:00   [+]  [Start]  │ Tue  6:45 AM     (on )  │
-│                            │ Wed  7:45 PM     ( off) │
-│  9:18                    ✕ │   [−] hour [+] ...Done  │
-│  10 minutes · ends 10:33   │ Thu  7:00 AM     ( off) │
+│ TIMER        │ NEXT ALARM   │ TORONTO            ☁   │
+│ 13:13        │ 7:00 AM      │ 11°c                   │
+│ 15 min·paused│ Mon·in 2d 14h│ overcast · feels 7°    │
+├──────────────┴──────────────┴────────────────────────┤
+│ ⏱            │ 🔔           │ ♫                      │
+│ Timers       │ Alarms       │ Music                  │
+│ 1 paused     │ 5 of 7 on    │ playing                │
+├──────────────┼──────────────┴────────────────────────┤
+│ ▦ Systems    │ ⚙ Settings                            │
 └──────────────────────────────────────────────────────┘
 ```
 
-Two touch decisions worth keeping: the duration and time controls are
-**steppers, not text fields or native pickers**, because there is no keyboard
-on this panel and Chromium's native time picker assumes one; and editing a
-time **expands in place** rather than opening a modal, so the rest of the week
-stays visible while one day changes.
+A glance card appears only when it has something to say — timers while any
+exist, the next alarm only while one is enabled, now playing only while
+something is playing. **Weather is the exception and is always there**: it is
+the one thing worth reading when nothing is happening, and a home screen that
+empties to nothing reads as broken.
+
+The tile grid is sized for **three columns** on a 1024-wide panel, so five
+tiles wrap to 3 + 2 and fill the height. One row of five left a third of the
+screen empty and made every tile a smaller target.
+
+**Timers** and **Alarms** are apps behind those tiles, with the whole screen
+each. Timers are also settable by voice; alarms are screen-only. Full feature
+notes are in `docs/TIMERS_AND_ALARMS.md`.
+
+The touch decision that shapes both: there is no keyboard on this panel and no
+on-screen one wanted, so neither a text field nor Chromium's native time
+picker is available. That leaves **gestures**: a duration dial you drag (one
+turn = an hour) and scroll-snap **wheels** for the alarm time. Both replaced
+`−`/`+` steppers that cost 45 taps for a 45-minute timer. The alarm editor
+still **expands in place** rather than opening a modal, so the rest of the
+week stays visible while one day changes.
 
 The ringing banner is rendered by the **shell**, not by this view, so a timer
 that ends while the panel is on Music still shows and is still stoppable. The

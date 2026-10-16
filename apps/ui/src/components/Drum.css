@@ -1,0 +1,104 @@
+/* ---------------------------------------------------------------------------
+   Wheel picker.
+
+   --drum-item is the single source of truth for the row height: the component
+   reads it back off this element to work out which row is centred, so
+   changing it here (the compact layout below does) needs no TS change.
+   --------------------------------------------------------------------------- */
+.drum {
+  --drum-item: 52px;
+  --drum-rows: 3;
+  /* What the top and bottom fades blend into. Overridden by whichever
+     surface the wheel is sitting on, so the fade never shows a seam. */
+  --drum-bg: var(--surface-1);
+
+  position: relative;
+  /* So the lens below can sit at z-index -1 without escaping behind the card
+     this wheel is placed on. */
+  isolation: isolate;
+  height: calc(var(--drum-item) * var(--drum-rows));
+  min-width: 78px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.drum__scroll {
+  height: 100%;
+  overflow-y: auto;
+  /* The browser's own snapping and momentum. `mandatory` is right here --
+     there is no such thing as a half-chosen hour. */
+  scroll-snap-type: y mandatory;
+  /* So the first and last rows can reach the middle. One row's worth above
+     and below, which assumes --drum-rows is 3. */
+  padding-block: var(--drum-item);
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.drum__scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.drum__item {
+  height: var(--drum-item);
+  display: grid;
+  place-items: center;
+  /* `center`, not `start`: with a row of padding above and below, centring
+     the row is what puts scrollTop at exactly index * item height, which is
+     the arithmetic the component reads back. */
+  scroll-snap-align: center;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease);
+}
+
+.drum__item.is-current {
+  color: var(--text);
+}
+
+/* The selection lens: one row tall, centred. */
+.drum__lens {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--drum-item);
+  height: var(--drum-item);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  pointer-events: none;
+  /* Behind the digits, which are painted by the scroller above it. */
+  z-index: -1;
+}
+
+/* Rows fade out as they leave the lens, so the wheel reads as curved without
+   any 3D transform. */
+.drum__fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--drum-item);
+  pointer-events: none;
+}
+
+.drum__fade--top {
+  top: 0;
+  background: linear-gradient(var(--drum-bg), transparent);
+}
+
+.drum__fade--bottom {
+  bottom: 0;
+  background: linear-gradient(transparent, var(--drum-bg));
+}
+
+@media (max-height: 620px) {
+  .drum {
+    --drum-item: 42px;
+  }
+
+  .drum__item {
+    font-size: var(--text-base);
+  }
+}

@@ -30,6 +30,7 @@
 .app__grid {
   flex: 1;
   display: grid;
+  animation: view-in var(--dur-slow) var(--ease-out);
   grid-template-columns: repeat(auto-fit, minmax(clamp(260px, 28vw, 340px), 1fr));
   grid-auto-rows: min-content;
   gap: clamp(var(--space-3), 1.6vw, var(--space-5));

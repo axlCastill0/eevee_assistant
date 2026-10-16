@@ -593,7 +593,12 @@ def _timer_status(item: Optional[str]) -> tuple[str, bool]:
 
     if len(running) == 1:
         left = timers.describe(round(running[0].remaining_s))
-        return f"{left} left on the {_as_adjective(running[0].label)} timer.", True
+        # Saying "4 minutes left" about a timer that is not counting would be
+        # a lie the panel could not correct, so the pause is part of the
+        # answer whenever it applies.
+        held = ", paused" if running[0].paused else ""
+        return (f"{left} left on the "
+                f"{_as_adjective(running[0].label)} timer{held}."), True
 
     return _running_summary(running), True
 
@@ -607,6 +612,7 @@ def _running_summary(running: list) -> str:
     parts = [
         f"{timers.describe(round(t.remaining_s))} on the "
         f"{_as_adjective(t.label)} timer"
+        + (" (paused)" if t.paused else "")
         for t in running
     ]
     if len(parts) == 1:

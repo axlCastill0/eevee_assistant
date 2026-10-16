@@ -1,6 +1,7 @@
 # Timers and alarms
 
-The **Dashboard** page — the panel's home screen — holds both. Timers can also
+**Timers** and **Alarms** are two apps, opened from the tiles on the
+**Dashboard** — the panel's home screen, which is a launcher. Timers can also
 be set by voice; alarms are screen-only, by design.
 
 ---
@@ -58,9 +59,22 @@ play the sound", and a tap starts it. The flag just removes the tap.
 
 ### From the screen
 
-Six presets (1, 3, 5, 10, 15, 30 minutes), or the `−` / `+` stepper for
-anything else, up to 12 hours. Several can run at once; each gets a card with
-its countdown and the wall-clock time it ends at.
+**Drag the dial.** One full turn is 60 minutes, so a quarter turn is fifteen;
+keep turning past the top and it keeps counting up, to a 12-hour ceiling. It
+snaps to whole minutes.
+
+The presets (30s, 1, 3, 5, 10, 15, 30, 45) **arm** the dial rather than
+starting straight away — so a mis-tap is not a timer you then have to cancel,
+and "10 minutes, actually 12" is a tap and a nudge. **Start** is always in the
+same place.
+
+Several can run at once; each gets a card with its countdown, a progress ring,
+and the wall-clock time it ends at.
+
+**Pause** holds a timer where it is — the ring greys, the card dims, it drops
+below anything still counting, and it will not fire until you press play
+again. A ringing timer has no pause; the only thing to do with one is clear
+it.
 
 ### By voice
 
@@ -104,8 +118,19 @@ one that should have gone off two minutes ago.
 
 ## 4. Alarms
 
-Seven slots, Monday to Sunday, each with a time and a switch. Tap the time to
-expand steppers (hours, and minutes in fives); tap **Done** to collapse.
+Seven slots, Monday to Sunday, each with a time and a switch.
+
+The **week strip** across the top is both the navigation and the overview:
+every day shows its time, and a filled dot means it is armed. Tap a day to
+edit it below.
+
+The time is set with **wheels** — flick the hour, the minutes (in fives) and
+AM/PM. The big switch arms the day.
+
+**Copy this time to** `Mon–Fri`, `Sat–Sun` or `All 7` writes the selected
+day's time across that group *and turns those days on*, which is the fast way
+out of setting the same alarm five times.
+
 Everything saves as you tap — there is no save button to forget.
 
 Alarms **are** persisted, to `state/alarms.json`. A schedule is still true

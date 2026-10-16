@@ -1,13 +1,18 @@
 /**
  * The view switcher.
  *
- * A rail rather than a drawer: there are two views and the panel is always
- * on, so a hamburger would hide the only navigation behind an extra tap for
- * no gain. Targets are deliberately larger than --touch-min because this is
- * the control most likely to be hit without looking.
+ * A rail rather than a drawer: there are a handful of views and the panel is
+ * always on, so a hamburger would hide the only navigation behind an extra
+ * tap for no gain. Targets are deliberately larger than --touch-min because
+ * this is the control most likely to be hit without looking.
+ *
+ * The rail lists DESTINATIONS, not every route. Timers and alarms are apps
+ * opened from the dashboard (USER DECISION 2026-10-16: keep the sidebar as it
+ * is), so they appear in the launcher's grid instead and light the Dashboard
+ * entry while open.
  */
 import type { Route } from '../lib/useRoute'
-import { navigate } from '../lib/useRoute'
+import { HOME_APPS, navigate } from '../lib/useRoute'
 import './Sidebar.css'
 
 interface Item {
@@ -74,7 +79,12 @@ const FOOTER_ITEMS: Item[] = [
 ]
 
 function SidebarButton({ item, route }: { item: Item; route: Route }) {
-  const active = route === item.route
+  // Dashboard stays lit while you are inside Timers or Alarms: those are
+  // apps launched from it, not places of their own in the rail, and a rail
+  // with nothing highlighted reads as "you are nowhere".
+  const active =
+    route === item.route ||
+    (item.route === 'dashboard' && HOME_APPS.includes(route))
   return (
     <button
       type="button"

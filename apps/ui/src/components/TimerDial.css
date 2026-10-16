@@ -1,0 +1,119 @@
+/* ---------------------------------------------------------------------------
+   The duration dial.
+
+   Square by aspect-ratio and capped, so it is big enough to turn accurately
+   with a thumb on a 1024x600 panel and does not eat the whole column on a
+   larger one.
+   --------------------------------------------------------------------------- */
+.dial {
+  position: relative;
+  width: 100%;
+  max-width: 260px;
+  aspect-ratio: 1;
+  margin-inline: auto;
+  display: grid;
+  place-items: center;
+  /* The knob orbits beyond the ring; without this it is clipped. */
+  overflow: visible;
+}
+
+.dial__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The arc starts at twelve o'clock. SVG strokes start at three, so the
+     whole ring is rotated a quarter turn rather than offsetting the dash. */
+  transform: rotate(-90deg);
+}
+
+.dial__track,
+.dial__fill {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.dial__track {
+  stroke: var(--surface-3);
+  transition: stroke var(--dur-theme) var(--ease);
+}
+
+.dial__fill {
+  stroke: var(--accent);
+  /* No transition: the stroke follows a finger, and easing a value that is
+     already being dragged makes the ring lag behind the knob. */
+}
+
+.dial__mark {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transition: stroke var(--dur-theme) var(--ease);
+}
+
+/* The knob is a child of a full-size rotating wrapper, parked at the top.
+   Rotating the wrapper moves the knob around the ring with one transform and
+   no trigonometry in JS. */
+.dial__knob-orbit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dial__knob {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  /* 7% of the dial is half the ring's stroke plus a little, so the knob sits
+     centred on the track at any size. */
+  width: 15%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -32%);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: var(--shadow-2);
+}
+
+/* Grows under the finger while dragging: a fingertip covers the knob, so the
+   feedback has to be visible around the edge of it. */
+.dial.is-dragging .dial__knob {
+  animation: grab var(--dur-fast) var(--ease-out) forwards;
+}
+
+.dial.is-dragging .dial__value {
+  color: var(--accent);
+}
+
+.dial__readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.dial__value {
+  font-size: var(--text-2xl);
+  font-weight: 620;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.dial__unit {
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+@media (max-height: 620px) {
+  .dial {
+    max-width: 190px;
+  }
+
+  .dial__value {
+    font-size: var(--text-xl);
+  }
+}

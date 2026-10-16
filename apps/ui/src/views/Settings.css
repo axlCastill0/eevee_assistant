@@ -3,6 +3,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* Every route animates in on mount. See the `view-in` keyframe. */
+  animation: view-in var(--dur-slow) var(--ease-out);
   max-width: 820px;
   overflow-y: auto;
   scrollbar-width: none;

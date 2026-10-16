@@ -366,6 +366,99 @@ button {
   }
 }
 
+/* View entrance. Every route animates in on mount -- App keys the view
+   wrapper on the route, so switching apps remounts and replays this. Slides
+   from the right because the sidebar is on the left: content arrives from
+   the direction it is not coming out of. */
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Launcher tiles and glance cards. A scale-up from slightly small reads as
+   "this came toward you", which is what a springboard should feel like. */
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+/* Insistent, for a countdown about to end or an alarm about to fire. Scales
+   a separate ring element, never a shadow or a filter. */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+/* A highlight that crosses a tile once. Used on the launcher as an idle
+   shimmer, slow enough not to be noise in a room. translate only. */
+@keyframes sheen {
+  from {
+    transform: translate3d(-120%, 0, 0) skewX(-18deg);
+  }
+  to {
+    transform: translate3d(320%, 0, 0) skewX(-18deg);
+  }
+}
+
+/* The soft colour wash behind the launcher. Two blobs on opposite phases,
+   moving slowly; a Pi composites a translating layer for free, where it would
+   repaint an animated gradient every frame. */
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(6%, -4%, 0) scale(1.12);
+  }
+  66% {
+    transform: translate3d(-5%, 5%, 0) scale(0.95);
+  }
+}
+
+/* A digit that just changed. Shorter than `flash` and it moves, so a
+   countdown reads as ticking rather than merely differing. */
+@keyframes tick-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -40%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* The dial's knob when a drag starts: grows under the finger so it is
+   visible past the fingertip. */
+@keyframes grab {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.18);
+  }
+}
+
 /* Respect the OS setting. Also a useful escape hatch if the Pi turns out to
    be slower than expected: one media query disables everything. */
 @media (prefers-reduced-motion: reduce) {

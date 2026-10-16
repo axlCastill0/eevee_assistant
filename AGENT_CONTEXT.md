@@ -46,8 +46,12 @@ apps/
                       disconnect (keyed) + /spotify/callback (KEYLESS)
       screen.py       /screen GET+POST. Polled by scripts/screen-agent.sh
       clock.py        /clock/state (ONE poll for timers+alarms+settings+screen),
-                      /clock/timers, /clock/alarms/<weekday>, /clock/settings,
+                      /clock/timers, /clock/timers/<id>/pause,
+                      /clock/alarms/<weekday>, /clock/settings,
                       /clock/sounds/<file>
+      weather.py      GET /weather. Its OWN route, not a /clock/state field:
+                      a cache miss blocks on Open-Meteo and that poll is the
+                      one that rings alarms
       status.py       GET /services - the dashboard's data source
     requirements.txt
     .env.example
@@ -78,13 +82,22 @@ apps/
   ui/                 Dashboard SPA. Vite + React + TS, static, nginx-served.
     index.html        Inline bg style prevents a white flash on cold boot
     src/App.tsx       Shell: sidebar + global chrome + the active view
-    src/views/        Clock.tsx (timers+alarms, the HOME route "dashboard"),
-                      NowPlaying.tsx (Spotify), Dashboard.tsx (systems grid,
-                      route "systems"), Settings.tsx
+    src/views/        Home.tsx (THE LAUNCHER, route "dashboard": glance strip
+                      + app grid), Timers.tsx, Alarms.tsx, NowPlaying.tsx
+                      (Spotify), Dashboard.tsx (systems grid, route
+                      "systems"), Settings.tsx
+                      (Clock.tsx was DELETED 2026-10-16: it was timers and
+                      alarms sharing one page; they are now an app each)
     src/components/RingingBanner.tsx  plays the mp3, Stop button; in the SHELL
     src/components/StatusIcons.tsx    top-bar timer/alarm icons
     (ThemeToggle.tsx was DELETED 2026-10-16: the control moved to Settings)
-    src/components/Sidebar.tsx   view switcher rail
+    src/components/Sidebar.tsx   view switcher rail. Lists DESTINATIONS, not
+                      every route: timers/alarms are launched from Home and
+                      light the Dashboard entry while open
+    src/components/AppHeader.tsx  back-to-launcher header for Timers/Alarms
+    src/components/TimerDial.tsx  drag-to-set duration ring (pointer events)
+    src/components/Drum.tsx       scroll-snap wheel picker (alarm hour/minute)
+    src/components/WeatherGlyph.tsx  WMO-code icons, inline SVG
     src/lib/useRoute.ts          hand-written hash router (no react-router)
     src/lib/useSpotify.ts        1Hz poll + local progress interpolation
     src/lib/coverColors.ts       two dominant cover colours off a 32x32 canvas
@@ -104,6 +117,7 @@ apps/
         useVoiceEvents.ts  WebSocket to /api/voice/events; reconnect + watchdog
         useTheme.ts   light/dark/auto, boundary timer, RTC guard
         useClock.ts   second-aligned tick (plain intervals drift)
+        useWeather.ts 5-minute poll of /weather; keeps the last good reading
         format.ts     durations, clock, labels
       components/
         TopBar/ThemeToggle/PollRing      header, 3-state toggle, poll sweep
@@ -175,7 +189,9 @@ ui:
           on the compositor. A JS animation library would add ~50KB and run
           work on the main thread the Pi does not need to do.
   deps: react, react-dom (runtime). Everything else is devDependencies.
-  payload: 239KB js / 74KB gzip, 18KB css, 89KB fonts
+  payload: 280KB js / 86KB gzip, 48KB css / 9KB gzip, 89KB fonts
+           (was 265/82 js and 35/7 css before the launcher + timer/alarm
+            apps landed on 2026-10-16)
   fonts: Inter + JetBrains Mono, SELF-HOSTED, latin subset only, declared by
          hand in index.css. The @fontsource package has no per-subset entry
          and its index.css pulls ~150KB of unused Cyrillic/Greek/Vietnamese.
@@ -401,9 +417,26 @@ latency:
 ## timers and alarms
 
 ```yaml
-home_route: "dashboard" = views/Clock.tsx (timers + alarms). The systems grid
-  moved to route "systems". Sidebar order: Dashboard, Music, Systems, then
-  Settings pinned to the bottom.
+home_route: "dashboard" = views/Home.tsx, THE LAUNCHER (REBUILT 2026-10-16).
+  A glance strip over a grid of app tiles. Timers and alarms are apps behind
+  it, at routes "timers" and "alarms", each with the whole screen.
+
+  glance strip: a card appears only when it has something to say -- timers
+    while any exist, the next alarm only while one is ENABLED, now playing
+    only while something is actually playing. WEATHER IS ALWAYS THERE, and is
+    the exception on purpose: it is the one thing worth reading when nothing
+    is happening, and a home screen that empties to nothing reads as broken.
+  app tiles: each carries a line of live state ("2 running", "5 of 7 on",
+    "1 down"), counted BY STATE -- a paused timer reads "1 paused", never
+    "1 running".
+  grid: sized for THREE columns on a 1024-wide panel, so five tiles wrap to
+    3 + 2 and fill a 600px-tall screen. One row of five left a third of the
+    panel empty and made every tile a smaller target.
+
+  SIDEBAR UNCHANGED (USER DECISION 2026-10-16). It lists destinations, not
+  routes: Dashboard, Music, Systems, Settings pinned to the bottom. Dashboard
+  stays lit while you are inside Timers or Alarms -- see HOME_APPS in
+  lib/useRoute.ts.
 
 timers:
   storage: IN MEMORY, monotonic deadlines. Not persisted on purpose -- a
@@ -411,6 +444,26 @@ timers:
     should have fired two minutes ago is worse than losing it.
   several at once (USER DECISION 2026-10-16). Labelled by duration, which is
     what makes a spoken "cancel the 10 minute timer" resolvable.
+  PAUSE (added 2026-10-16): a paused timer holds the remainder it had, and
+    resuming computes a fresh monotonic deadline from it. Storing the
+    REMAINDER rather than a "paused at" instant is what makes a pause survive
+    an NTP step. `_sweep` skips paused timers entirely, so one can sit past
+    its original deadline without ringing. `active()` sorts paused timers
+    last however little they have left: the list reads as "what is about to
+    happen", and a paused timer is not going to happen.
+    Route: POST /clock/timers/<id>/pause with `{"paused": true|false}` -- the
+    state the panel WANTS, not a toggle verb, so a double tap on a
+    touchscreen settles instead of flapping. Idempotent. A ringing timer
+    cannot be paused.
+  SCREEN UX (REBUILT 2026-10-16): components/TimerDial.tsx. Drag the ring to
+    set a duration -- one revolution = 60 minutes, 6 deg/minute, wraps
+    counted so two turns is two hours. Snaps to whole minutes, which is the
+    granularity the +/- stepper it replaced had; the sub-minute end is a
+    preset ("30s"). Tapping a preset ARMS the dial rather than starting
+    immediately, so a mis-tap is not a timer you then have to cancel.
+    WHY A GESTURE AT ALL: there is no keyboard on this panel and no on-screen
+    one wanted (USER 2026-10-16), so a text field was never an option and the
+    old stepper was 45 taps for a 45-minute timer.
   voice: set_timer / cancel_timer / timer_status, with fast-path regexes.
     Durations parsed on the BACKEND (timers.parse_duration): "half an hour",
     "ninety seconds", and a bare "ten" = ten minutes.
@@ -426,6 +479,23 @@ alarms:
     restart inside the 120s fire window from re-ringing it.
   screen-only. No voice (USER DECISION): a misheard word costs most on a
     recurring weekly commitment.
+  SCREEN UX (REBUILT 2026-10-16, model UNCHANGED -- USER chose to keep the 7
+    slots and rebuild only the controls):
+      - the week is a strip of seven chips, always visible. It is the
+        navigation AND the overview: every day's time is legible without
+        selecting it. Selected is a border, enabled is colour plus a filled
+        dot -- two different questions, so two signals.
+      - the selected day gets components/Drum.tsx wheel pickers (hour /
+        minute / AM-PM), flicked rather than tapped. CSS scroll-snap does the
+        physics; the component only reads which row ended up centred. Minutes
+        stay on the 5-minute grid the stepper had.
+      - COPY THIS TIME TO Mon-Fri / Sat-Sun / All 7, which also ENABLES those
+        days: "same as Monday" means you want the alarm, not a row that
+        merely agrees about a time it will never ring at. This is the single
+        biggest win available without changing the data model, which is why
+        seven slots remain comfortable.
+    NOT a modal, for the same reason the old accordion was not: "is Thursday
+    also set" is the question you are usually answering while you edit.
 
 audio:
   PLAYS IN THE KIOSK BROWSER (USER DECISION 2026-10-16), not the backend and
@@ -970,7 +1040,7 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `SCREEN_AGENT_INTERVAL` | no | `scripts/screen-agent.sh` | seconds between polls; default 2 |
 | `ALARMS_PATH` | no | backend `alarms.py` | default `/app/state/alarms.json` |
 | `SETTINGS_PATH` | no | backend `settings.py` | default `/app/state/settings.json` |
-| `WEATHER_LAT` | no | backend `weather.py` | required for get_weather; without it the intent says so |
+| `WEATHER_LAT` | no | backend `weather.py` | required for get_weather AND the launcher's weather card; without it both say so |
 | `WEATHER_LON` | no | backend `weather.py` | as above |
 | `WEATHER_PLACE` | no | backend `weather.py` | spoken aloud ("12 degrees in Toronto"); empty omits it |
 | `WEATHER_UNITS` | no | backend `weather.py` | `celsius` (default) or `fahrenheit` |
@@ -1180,6 +1250,14 @@ xterm_is_required:
 | 2026-10-16 | every Spotify failure gets its own spoken sentence | "no Premium" and "nothing is playing anywhere" need opposite reactions from the person standing there; one generic apology would be useless. Mapped once in `intents._music_problem` so five handlers cannot drift |
 | 2026-10-16 | fastpath matches the RAW sentence before the filler-stripped one | "again" is filler in "what's the time again" and the entire meaning of "play it again". Two passes, literal first, keeps both |
 | 2026-10-16 | Dashboard (timers+alarms) is the home route; systems grid demoted to "systems" | USER: the new page is the main one. An unrecognised hash lands there too |
+| 2026-10-16 | home became a LAUNCHER; timers and alarms split into apps behind it | USER: "a kind of application page". Sharing one screen capped both halves at controls that fit in half a column -- which is how the alarm editor ended up a +/- stepper behind an accordion. A whole screen each is what paid for the dial and the wheel pickers |
+| 2026-10-16 | sidebar stays four destinations; timers/alarms are NOT in the rail | USER: keep the current sidebar. They are apps opened from the launcher, so Dashboard stays lit while you are inside one -- a rail with nothing highlighted reads as "you are nowhere" |
+| 2026-10-16 | glance cards are conditional, EXCEPT weather | a card with nothing to say is noise. Weather is the exception because it is the one thing worth reading when nothing is happening, and a home screen that empties to nothing reads as broken |
+| 2026-10-16 | timer duration is a DRAG, not a stepper or a text field | there is no keyboard on the Pi and no on-screen one wanted (USER), so a field was never an option, and the stepper was 45 taps for a 45-minute timer. A dial is the gesture an oven already taught everyone |
+| 2026-10-16 | alarm times are scroll-snap WHEELS, physics by the browser | same no-keyboard constraint; `<input type="time">` opens a picker that assumes one. Native scrolling is the one smooth thing a Pi gets for free, so the component only reads which row ended up centred |
+| 2026-10-16 | 7 alarm slots KEPT; only the controls rebuilt | USER chose this over arbitrary alarms with repeat patterns. "Copy this time to Mon-Fri" removes the tedium that would have justified the bigger model, with no migration of state/alarms.json |
+| 2026-10-16 | pause sends the state it WANTS, not a toggle | a touchscreen double tap on a toggle flaps; on `{"paused": true}` it settles. Also makes the call idempotent and the UI unable to guess wrong |
+| 2026-10-16 | weather got its own route, not a field on /clock/state | /clock/state is polled 1Hz and is all in memory; `weather.current()` blocks up to 4s on a cache miss, which is the dashboard's whole timeout for the poll that RINGS ALARMS |
 | 2026-10-16 | timers in memory, alarms persisted | opposite lifetimes for opposite reasons: a countdown is only meaningful relative to now, a weekly schedule is still true after a reboot |
 | 2026-10-16 | timers monotonic, alarms wall clock | the Pi has no RTC and steps its clock at boot. A countdown must ignore that step; an alarm must follow it |
 | 2026-10-16 | alarm/timer audio plays in the KIOSK BROWSER | USER CHOICE from three options. The voice container owns the speaker but its loop is single-threaded, so a song there would deafen the wake word for minutes; the backend would need /dev/snd and a dmix setup to share the card |
@@ -1272,6 +1350,27 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS, REAL backend (uvicorn in a venv) + vite + the browser
+     pane at 1024x600, light AND dark: the launcher/timers/alarms rebuild.
+     Launcher showed the conditional glance strip (timer card with its
+     progress hairline, next-alarm card, always-on weather card reading a
+     REAL Open-Meteo response through the new GET /weather) and app tiles
+     with live state. Timers: the dial drag set 8:00 and armed Start; pause
+     froze a timer at 0:22, dimmed it, greyed its ring, dropped it below the
+     running one, cleared ends_at and changed the subtitle to
+     \"1 running - 1 paused\"; resume restored all of it; backend logged one
+     pause/resume per tap. Alarms: the week strip rendered all seven,
+     Friday preselected; the hour wheel moved Friday 7:00 -> 10:00 AM through
+     the real API and did not fight the scroll back; Copy to Mon-Fri enabled
+     five days and turned the button green. The shell RingingBanner still
+     fired over the alarms app, proving the app split did not move it out of
+     the shell. Weather initially returned status=unavailable with
+     CERTIFICATE_VERIFY_FAILED until certifi was installed -- exactly the
+     failure weather.py documents.
+     NOT VERIFIED: real touch flicks and drags on the Pi (a synthetic mouse
+     wheel does not move a scroll-snap wheel; the read-back was driven
+     programmatically instead), the aura/sheen animations' real cost on a Pi
+     GPU, and audible playback."
   - "2026-10-16 macOS, real backend + agent: a fresh install reports
      screen_timeout_min=30; voice sleep_screen drove the stand-in backlight
      to 4; a following state=listening woke it to 0 with source="wake word";

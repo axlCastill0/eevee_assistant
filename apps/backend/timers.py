@@ -23,6 +23,14 @@ RINGING
     stopped: by the Stop button, or by the dashboard reporting that the song
     ended. Nothing expires it on a timer of its own, because an alarm nobody
     acknowledged is not an alarm that has been dealt with.
+
+PAUSING
+    A paused timer has no deadline -- it holds the remainder it had when it
+    was paused, and resuming computes a fresh monotonic deadline from that.
+    Storing the remainder rather than a "paused at" instant is what makes a
+    pause survive an NTP step, and it keeps `_sweep` from firing something
+    that is not counting: a paused timer is skipped there entirely, so it can
+    sit past its original deadline without ringing.
 """
 from __future__ import annotations
 
@@ -48,20 +56,29 @@ class Timer:
     id: str
     label: str
     duration_s: int
-    # Monotonic deadline. Compare only against time.monotonic().
+    # Monotonic deadline. Compare only against time.monotonic(). Meaningless
+    # while paused -- `held_s` is the authority then.
     deadline: float
     created_at: float = field(default_factory=time.time)
     fired_at: Optional[float] = None
+    # Seconds left at the moment of pausing. None means running.
+    held_s: Optional[float] = None
 
     @property
     def remaining_s(self) -> float:
         if self.fired_at is not None:
             return 0.0
+        if self.held_s is not None:
+            return self.held_s
         return max(0.0, self.deadline - time.monotonic())
 
     @property
     def ringing(self) -> bool:
         return self.fired_at is not None
+
+    @property
+    def paused(self) -> bool:
+        return self.fired_at is None and self.held_s is not None
 
 
 _timers: dict[str, Timer] = {}
@@ -186,20 +203,52 @@ def stop_ringing(timer_id: str) -> bool:
     return cancel(timer_id)
 
 
+def set_paused(timer_id: str, paused: bool) -> Optional[Timer]:
+    """Hold or release a running timer. None if there is no such timer.
+
+    Idempotent: pausing a paused timer, or resuming a running one, is a no-op
+    that still reports success. The panel is the only caller and it can only
+    ever be a poll behind, so a double tap must not be an error.
+
+    A ringing timer cannot be paused -- there is nothing left to count, and
+    the thing to do with it is acknowledge it.
+    """
+    timer = _timers.get(timer_id)
+    if timer is None:
+        return None
+    if timer.ringing:
+        return timer
+
+    if paused and timer.held_s is None:
+        timer.held_s = timer.remaining_s
+        log.info("Timer %s paused with %.0fs left (%s)",
+                 timer.id, timer.held_s, timer.label)
+    elif not paused and timer.held_s is not None:
+        timer.deadline = time.monotonic() + timer.held_s
+        timer.held_s = None
+        log.info("Timer %s resumed (%s)", timer.id, timer.label)
+
+    return timer
+
+
 def _sweep() -> None:
     """Mark anything past its deadline as fired. Called before every read."""
     now = time.monotonic()
     for timer in _timers.values():
-        if timer.fired_at is None and timer.deadline <= now:
+        # A paused timer has no live deadline; the one it holds is stale by
+        # design and must not be compared against the clock.
+        if timer.fired_at is None and timer.held_s is None and timer.deadline <= now:
             timer.fired_at = time.time()
             log.info("Timer %s fired (%s)", timer.id, timer.label)
 
 
 def active() -> list[Timer]:
-    """Timers still counting down, soonest first."""
+    """Timers not yet fired, soonest first. Paused ones sort after running
+    ones however little they have left -- the list is read as "what is about
+    to happen", and a paused timer is not going to happen at all."""
     _sweep()
     return sorted((t for t in _timers.values() if not t.ringing),
-                  key=lambda t: t.remaining_s)
+                  key=lambda t: (t.paused, t.remaining_s))
 
 
 def ringing() -> list[Timer]:
@@ -222,10 +271,13 @@ def as_dict(timer: Timer) -> dict:
         "duration_s": timer.duration_s,
         "remaining_s": round(remaining, 1),
         "ringing": timer.ringing,
+        "paused": timer.paused,
         # Display only, and recomputed from the monotonic remainder every
         # read, so an NTP step corrects it instead of baking in an error.
+        # Null while paused: there is no answer to "ends at" for a countdown
+        # that is not counting, and a frozen time would read as a bug.
         "ends_at": (datetime.now() + timedelta(seconds=remaining)).strftime("%-I:%M %p")
-        if not timer.ringing else None,
+        if not timer.ringing and not timer.paused else None,
     }
 
 

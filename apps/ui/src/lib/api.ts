@@ -79,7 +79,10 @@ export interface TimerEntry {
   duration_s: number
   remaining_s: number
   ringing: boolean
-  /** Wall-clock time this timer ends, pre-formatted. Null once it has fired. */
+  /** Held: `remaining_s` is frozen and the timer will not fire. */
+  paused: boolean
+  /** Wall-clock time this timer ends, pre-formatted. Null once it has fired,
+   *  and null while paused — a countdown that is not counting has no end. */
   ends_at: string | null
 }
 
@@ -92,6 +95,21 @@ export interface AlarmEntry {
   /** Pre-formatted AM/PM, so the panel and anything spoken agree. */
   label: string
   next_fire_in_s: number | null
+}
+
+/** Current conditions. Every non-answer is a `status`, not an HTTP error:
+ *  "no location set" and "Open-Meteo unreachable" need different words. */
+export interface WeatherState {
+  status: 'ok' | 'unconfigured' | 'unavailable'
+  temp?: number
+  feels_like?: number
+  description?: string
+  is_day?: boolean
+  place?: string
+  /** Raw WMO code. The icon is chosen from this, not from `description` —
+   *  the wording groups codes that want different glyphs. */
+  code?: number
+  units?: 'celsius' | 'fahrenheit'
 }
 
 export interface SoundEntry {
@@ -234,6 +252,12 @@ export function deleteTimer(id: string) {
   return del<{ status: string }>(`/clock/timers/${id}`)
 }
 
+/** Send the state the panel WANTS, not a verb: a double tap then settles on
+ *  the same thing instead of toggling twice. */
+export function setTimerPaused(id: string, paused: boolean) {
+  return post<TimerEntry>(`/clock/timers/${id}/pause`, { paused })
+}
+
 export function stopRingingTimers() {
   return post<{ stopped: number }>('/clock/timers/stop-all', {})
 }
@@ -266,6 +290,10 @@ export function setScreen(on: boolean, source: string) {
 /** Same-origin audio, streamed by the backend out of the media directory. */
 export function soundUrl(file: string) {
   return `/api/clock/sounds/${encodeURIComponent(file)}`
+}
+
+export function fetchWeather() {
+  return get<WeatherState>('/weather')
 }
 
 export function fetchNowPlaying() {

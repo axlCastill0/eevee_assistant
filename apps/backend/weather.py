@@ -85,6 +85,13 @@ class Weather:
     description: str        # already spoken-friendly, e.g. "light rain"
     is_day: bool
     place: str
+    # Raw WMO code. The spoken answer never needs it, but the panel draws an
+    # icon from it: grouping "drizzling" and "pouring" into one word is right
+    # for speech and wrong for a glyph.
+    code: int = 0
+    # "celsius" or "fahrenheit", echoed from WEATHER_UNITS so the panel can
+    # print the degree symbol without being told separately.
+    units: str = "celsius"
 
 
 # WMO weather interpretation codes, worded for speech rather than for a table.
@@ -114,11 +121,13 @@ def _fetch() -> Optional[Weather]:
     lon = _env_float("WEATHER_LON", 0.0)
     place = os.environ.get("WEATHER_PLACE", "").strip()
 
+    units = os.environ.get("WEATHER_UNITS", "celsius")
+
     query = urllib.parse.urlencode({
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,apparent_temperature,weather_code,is_day",
-        "temperature_unit": os.environ.get("WEATHER_UNITS", "celsius"),
+        "temperature_unit": units,
         "timezone": "auto",
     })
 
@@ -136,12 +145,15 @@ def _fetch() -> Optional[Weather]:
 
     try:
         current = payload["current"]
+        code = int(current["weather_code"])
         return Weather(
             temp_c=round(float(current["temperature_2m"])),
             feels_like_c=round(float(current["apparent_temperature"])),
-            description=_CODES.get(int(current["weather_code"]), "unsettled"),
+            description=_CODES.get(code, "unsettled"),
             is_day=bool(current.get("is_day", 1)),
             place=place,
+            code=code,
+            units=units,
         )
     except (KeyError, TypeError, ValueError) as exc:
         log.warning("Unexpected weather payload (%s): %.200s", exc, payload)
@@ -176,3 +188,28 @@ def current() -> Optional[Weather]:
 def is_configured() -> bool:
     """False when no location has been set, so the handler can say so."""
     return bool(os.environ.get("WEATHER_LAT") and os.environ.get("WEATHER_LON"))
+
+
+def state() -> dict:
+    """What the panel polls. `status` carries every non-answer, the same way
+    the Spotify snapshot does: "no location configured" and "cannot reach
+    Open-Meteo" need different words on screen, and neither is an HTTP error
+    of this backend's making.
+    """
+    if not is_configured():
+        return {"status": "unconfigured"}
+
+    reading = current()
+    if reading is None:
+        return {"status": "unavailable"}
+
+    return {
+        "status": "ok",
+        "temp": reading.temp_c,
+        "feels_like": reading.feels_like_c,
+        "description": reading.description,
+        "is_day": reading.is_day,
+        "place": reading.place,
+        "code": reading.code,
+        "units": reading.units,
+    }
