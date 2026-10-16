@@ -6,6 +6,15 @@ services:
       dockerfile: infra/docker/backend/Dockerfile
     restart: always
     network_mode: host
+
+    volumes:
+      # Writable state, as opposed to the read-only models mount below. The
+      # only thing in here is the Spotify refresh token, and it is the reason
+      # the Pi stays connected across restarts instead of needing a new
+      # consent screen every time. Mode 0600, written atomically; see
+      # spotify.py and docs/SPOTIFY.md.
+      - ../../state:/app/state
+
     env_file:
       - path: .env
         required: false

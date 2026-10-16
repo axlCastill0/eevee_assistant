@@ -10,3 +10,7 @@ _temp/
 .pytest_cache/
 node_modules/
 dist/
+
+# Writable container state. Holds the Spotify refresh token -- a credential,
+# and machine-specific. Never commit it.
+state/

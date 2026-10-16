@@ -122,11 +122,40 @@ would leave the dashboard in a fallback face.
 
 ## 5. Layout
 
+The shell is a fixed rail plus one view. Chrome (clock, voice pill, theme) is
+global: it stays put when the view changes, because the clock and the pill are
+the two things that must be readable whatever page is up.
+
+```
+┌────┬─────────────────────────────────────────────────┐
+│ ▌  │  8:41 ³⁷ PM  (● Ready) [live 9ms] [Light|Dark] │  TopBar
+│ ▪▪ │  Sunday, October 4                              │
+│Sys │                                                 │
+│    │                                                 │
+│ ♪  │              the active view                    │
+│Mus │                                                 │
+└────┴─────────────────────────────────────────────────┘
+  ▲
+  Sidebar — one button per view, 68px+ targets
+```
+
+### Routing
+
+Hash routing, hand-written, in `lib/useRoute.ts`. Two views, no params, no
+nested routes: react-router is ~20 KB to replace 30 lines, and every
+dependency here has to survive an `npm ci` during an image build on the Pi.
+The hash rather than `pushState` because a reload then never 404s, including
+against the dev server.
+
+Adding a view is three edits: a `Route` in `useRoute.ts`, an entry in
+`Sidebar.tsx`'s `ITEMS`, and a branch in `App.tsx`.
+
+### Views
+
+**Systems** — the original dashboard, unchanged:
+
 ```
 ┌──────────────────────────────────────────────────────┐
-│  8:41 ³⁷ PM   (● Ready) [live 9ms] [Light|Dark|Auto] │  TopBar
-│  Sunday, October 4                                    │
-├──────────────────────────────────────────────────────┤
 │ ▌ SYSTEM                                             │  Overview
 │   Everything good.                                   │  (backend's own
 │   2 services reporting healthy                       │   speech string)
@@ -139,6 +168,39 @@ would leave the dashboard in a fallback face.
 │ eevee │ updated just now │ stale after 45s           │  footer
 └──────────────────────────────────────────────────────┘
 ```
+
+**Music** — Spotify now playing. Cover left, metadata and controls right, both
+boxes the same size, the pair centred in both axes:
+
+```
+┌──────────────────────────────────────────────────────┐
+│          ┌───────────┐   NOW PLAYING · Living Room   │
+│          │           │   Everything In Its           │
+│          │   cover   │   Right Place                 │
+│          │           │   Radiohead                   │
+│          │           │   Kid A                       │
+│          └───────────┘   ▓▓▓▓░░░░░░░░░░░░░░░░░░      │
+│                          0:36              4:03      │
+│                          (◀◀)  ( ▶ )  (▶▶)           │
+│                          SPOTIFY                      │
+└──────────────────────────────────────────────────────┘
+```
+
+One custom property, `--np-size`, is both the cover's edge and the panel's
+width, so the halves cannot drift apart at any panel size. The background is
+the cover's two dominant colours as a gradient; see `lib/coverColors.ts`, and
+`docs/SPOTIFY.md` for the whole feature.
+
+Two details that follow this UI's existing rules rather than being new ideas:
+
+- the progress bar fills with `transform: scaleX()`, not `width`, because the
+  only properties animated anywhere here are transform and opacity
+- the background crossfades between two stacked gradient layers, for the same
+  reason — a gradient cannot be transitioned, an opacity can
+
+There is deliberately **no scrub**: the bar is a readout (USER DECISION
+2026-10-16). It is also the only control that would need a drag, which is the
+gesture a touch panel handles worst.
 
 The headline reuses the backend's `speech` field — the same sentence the voice
 assistant says aloud. The panel and the assistant cannot disagree, because

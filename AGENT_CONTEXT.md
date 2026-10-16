@@ -7,7 +7,7 @@ UPDATE THIS FILE IN THE SAME COMMIT AS ANY CHANGE IT DESCRIBES. See `## update_p
 meta:
   project: eevee_assistant
   root: /Users/tako/root/eevee_assistant
-  last_updated: 2026-10-15
+  last_updated: 2026-10-16
   git_branch_main: main
   target_host: Raspberry Pi 5 (8GB recommended), Raspberry Pi OS Lite 64-bit
                CONFIRMED 2026-10-07: the Pi runs Trixie (Debian 13), aarch64.
@@ -27,12 +27,16 @@ apps/
     intents.py        INTENT REGISTRY - single source of truth; handlers and
                       their hand-written phrasing variants
     sysinfo.py        host uptime + SoC temperature, read from /proc and /sys
+    spotify.py        SPOTIFY: OAuth tokens, TTL'd playback snapshot, the four
+                      controls, cover-art fetch. urllib, no new deps
     weather.py        Open-Meteo lookup, cached, no API key
     services.py       SERVICE HEALTH - heartbeat registry + summarize()
     routes/
       __init__.py     Empty, marks package
       voice.py        /voice/health, /voice/heartbeat, /voice/intents,
                       /voice/intent, /voice/state, WS /voice/events
+      spotify.py      /spotify/now-playing|command|art|status|login|code|
+                      disconnect (keyed) + /spotify/callback (KEYLESS)
       status.py       GET /services - the dashboard's data source
     requirements.txt
     .env.example
@@ -58,8 +62,14 @@ apps/
       tts.py          Piper TTS + output resampling
       pipeline.py     Main loop wiring every stage
       devices.py      `python -m voice_assistant.devices` audio device lister
-  ui/                 Dashboard. Vite + React + TS, static build, nginx-served.
+  ui/                 Dashboard SPA. Vite + React + TS, static, nginx-served.
     index.html        Inline bg style prevents a white flash on cold boot
+    src/App.tsx       Shell: sidebar + global chrome + the active view
+    src/views/        Dashboard.tsx (systems grid), NowPlaying.tsx (Spotify)
+    src/components/Sidebar.tsx   view switcher rail
+    src/lib/useRoute.ts          hand-written hash router (no react-router)
+    src/lib/useSpotify.ts        1Hz poll + local progress interpolation
+    src/lib/coverColors.ts       two dominant cover colours off a 32x32 canvas
     vite.config.ts    Dev-only /api proxy that injects the key like nginx does
     package.json
     .env.example      Dev server only; NOT compiled into the bundle
@@ -94,6 +104,7 @@ infra/
 docs/
   README_PI.md        Pi setup from a fresh clone; audio device lock-in
   VOICE_SETUP.md      Pi setup, architecture, latency, gotchas, wake word
+  SPOTIFY.md          Spotify app registration, the one-time connect, routes
   PSU.md              power supply requirements
   UI.md               dashboard stack rationale, theme, touch, Pi perf, kiosk
 scripts/
@@ -102,6 +113,10 @@ scripts/
 hey_eevee_model/             COMMITTED. "hey eevee" heed export + its README.
                              wake.onnx (fp32), wake.int8.onnx, wake.json.
 models/                      GITIGNORED. Bind-mounted read-only into voice.
+state/                       GITIGNORED. Bind-mounted READ-WRITE into backend
+                             at /app/state. Holds spotify.json (refresh token,
+                             mode 0600). Its absence costs a re-authorization
+                             on every restart, nothing worse.
 _temp/                       GITIGNORED. Original prototype; reference only.
 AGENT_CONTEXT.md             This file.
 ```
@@ -344,6 +359,52 @@ BOOT GOTCHA - WHISPER MUST NOT TOUCH THE NETWORK (fixed 2026-10-08):
 latency:
   fastpath_hit: ~2s end-to-end
   slm_fallback: ~6-7s end-to-end
+```
+
+## spotify panel
+
+```yaml
+view: apps/ui/src/views/NowPlaying.tsx, route #/music
+controls: previous, play/pause, next. NO SEEK (user decision 2026-10-16)
+
+hard_constraints:
+  - the Web API is a REMOTE CONTROL: it cannot originate audio. Nothing
+    playing anywhere => every control returns 404 NO_ACTIVE_DEVICE. The fix is
+    a Spotify Connect client on the Pi (raspotify), not a code change
+  - playback control requires PREMIUM; reading does not
+  - scopes: user-read-playback-state, user-read-currently-playing,
+    user-modify-playback-state. Adding one means re-authorizing
+
+data_flow:
+  spotify.py holds a TTL'd snapshot (3s playing / 10s not) refreshed inside
+  whichever request finds it stale. UI polls /api/spotify/now-playing at 1Hz
+  and interpolates progress from the snapshot's `fetched_at` between samples.
+  A tap flips is_playing optimistically and refetches after 350ms (Spotify
+  needs a beat to settle, especially on a skip).
+
+statuses: ok | idle | unconfigured | unauthorized | unreachable | rate_limited
+  Always HTTP 200: a panel must tell "paused" from "not connected" from
+  "Spotify is down", and an error code would be swallowed by the UI's generic
+  backend-unreachable handling.
+  command adds: no_device | premium_required | unsupported
+
+degraded: a failed refresh serves the LAST GOOD snapshot with `degraded` set
+  rather than blanking a populated panel.
+
+auth: Authorization Code. Refresh token in /app/state/spotify.json, 0600,
+  written atomically. Does not expire unless revoked -> one consent screen,
+  then months unattended. See docs/SPOTIFY.md.
+
+colours: lib/coverColors.ts draws the cover into a 32x32 canvas, buckets into
+  a 5-bit-per-channel histogram, takes the heaviest bucket plus the heaviest
+  one far enough away in hue/lightness. A monochrome cover DERIVES the second
+  colour (hue rotated, lightness pushed the other way) instead of showing a
+  flat wash. Two stacked gradient layers crossfade on track change, because a
+  gradient cannot transition and an opacity can.
+
+spotify_rules: their design guidelines are mandatory for API users. Keep the
+  SPOTIFY attribution, do not alter album art, do not mix other content
+  sources into the view.
 ```
 
 ## service independence
@@ -757,6 +818,10 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `VOICE_STATE_EVENTS` | no | voice `activity.py` | default true; false stops publishing and the pill reads "unknown" |
 | `VOICE_STATE_EVENT_TIMEOUT_S` | no | voice `api_client.py` | default 1.0; deliberately shorter than `VOICE_API_TIMEOUT_S` |
 | `VOICE_WHISPER_ALLOW_DOWNLOAD` | no | voice `config.py` | default false. True lets Whisper fetch from HuggingFace; see the boot gotcha below |
+| `SPOTIFY_CLIENT_ID` | no | backend `spotify.py` | from developer.spotify.com. Without it the Music view says "not set up" |
+| `SPOTIFY_CLIENT_SECRET` | no | backend `spotify.py` | never leaves the backend |
+| `SPOTIFY_REDIRECT_URI` | no | backend `spotify.py` | default `http://127.0.0.1:8000/spotify/callback`; must match the Spotify dashboard EXACTLY. `localhost` is rejected by Spotify |
+| `SPOTIFY_TOKEN_PATH` | no | backend `spotify.py` | default `/app/state/spotify.json`; must be writable or authorization is lost on restart |
 | `WEATHER_LAT` | no | backend `weather.py` | required for get_weather; without it the intent says so |
 | `WEATHER_LON` | no | backend `weather.py` | as above |
 | `WEATHER_PLACE` | no | backend `weather.py` | spoken aloud ("12 degrees in Toronto"); empty omits it |
@@ -953,6 +1018,14 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | dashboard became an SPA: sidebar rail + hash router | USER: multiple views. Chrome (clock, voice pill) stays global because those two must be readable on every page |
+| 2026-10-16 | hand-written hash router, not react-router | two views, no params, no loaders. ~20 KB and an npm dependency to replace 30 lines, on a bundle that is built on the Pi |
+| 2026-10-16 | Spotify: UI polls the BACKEND at 1Hz, backend polls Spotify on a TTL | Spotify sees one request every few seconds regardless of how many dashboards are open, and a page nobody is looking at costs nothing. Progress is interpolated client-side, so 1Hz looks continuous |
+| 2026-10-16 | no background poller task; refresh inside the stale request | same shape as weather.py. No concurrency to supervise, and demand-driven by construction |
+| 2026-10-16 | progress bar is a READOUT; no scrub | USER DECISION. Also removes the only drag gesture on the page, which is what a touch panel handles worst |
+| 2026-10-16 | cover art proxied through the backend | same-origin pixels for the colour extraction (no CORS dependency), no direct CDN access needed from the kiosk, and immutable so it caches for a year |
+| 2026-10-16 | OAuth callback route is KEYLESS, protected by a single-use state | the browser Spotify redirects has no API key and nginx only injects on /api/*. /login mints the state and DOES require the key, so no key means no state means the callback refuses |
+| 2026-10-16 | dominant colours by hand (32x32 canvas histogram), not node-vibrant | two colours behind large text is a lower bar than perceptual palette extraction, and this runs on every track change on a Pi |
 | 2026-10-15 | wake word = "hey eevee" heed export, own frontend in `wake_heed.py` | USER supplied the model. openWakeWord cannot load it: different input contract (log-mel vs its own embedding frontend), so the sidecar's chain had to be reimplemented on numpy+scipy rather than configured |
 | 2026-10-15 | engine chosen by sidecar presence, not an env var | one less thing to set wrong; `hey_jarvis` and openWakeWord exports keep working untouched |
 | 2026-10-15 | threshold defaults to the sidecar's, not 0.5 | 0.603 is what the model was calibrated at; a hardcoded default would silently detune it |
@@ -1027,6 +1100,24 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS: backend via fastapi TestClient -- key required on
+     /spotify/now-playing (401 without), unconfigured/unauthorized statuses
+     correct, bad action 400, bad art id 404, callback with an unknown state
+     400, state verified single-use (True then False), token file written
+     0600 and removed by disconnect, /services still mounted."
+  - "2026-10-16 macOS: UI built clean (tsc -b + vite, 254KB js / 79KB gzip)
+     and driven in a browser at 1024x600 against a MOCK backend. Verified:
+     sidebar switches views, music view centred with equal-width halves,
+     dominant-colour background (magenta/teal from a two-colour cover, and the
+     DERIVED second colour from a monochrome one), paused vs playing icons,
+     progress bar + second counter advancing, the connect screen. Console
+     clean apart from the mock having no WebSocket.
+     NOT VERIFIED: a real Spotify account, Premium controls, the OAuth
+     round trip, and anything on the Pi itself."
+  - "2026-10-16 FIXED a pre-existing bug found by that run: two polls landing
+     in the same millisecond produced duplicate Sparkline React keys
+     (useServices.ts). StrictMode's double mount-effect triggers it every
+     dev boot; a retry could do it in production."
   - "2026-10-15 macOS, simulated Pi device list (the user's real one, from
      /proc/asound/cards + PortAudio): CARD=eeveemic -> [0], CARD=eeveespk ->
      [1], hw:CARD= form, name substring and raw index all resolve correctly;

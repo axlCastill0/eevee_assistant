@@ -255,44 +255,25 @@ def configure_logging() -> None:
 
 
 def alsa_card_index(card_id: str) -> int:
-    """ALSA card id -> card number, read from /proc/asound.
+    """ALSA card id -> card number. See voice_assistant.alsa for the lookup.
 
-    ALSA keeps a symlink per card id (/proc/asound/eeveemic -> card0), and the
-    container shares the host's procfs, so this is readable from inside it.
-    Falls back to parsing /proc/asound/cards, whose lines look like
-    ` 0 [eeveemic       ]: USB-Audio - USB Microphone`.
+    Short version: this asks libasound over /dev/snd rather than reading
+    /proc/asound, because the container runtime masks /proc/asound to an
+    empty directory and the /proc route therefore only works on the host.
     """
-    link = f"/proc/asound/{card_id}"
-    if os.path.islink(link):
-        target = os.path.basename(os.path.realpath(link))   # "card0"
-        if target.startswith("card") and target[4:].isdigit():
-            return int(target[4:])
+    from . import alsa
 
-    try:
-        with open("/proc/asound/cards") as fh:
-            for line in fh:
-                # Only the index line carries brackets; the name line follows.
-                if "[" not in line:
-                    continue
-                number, _, rest = line.strip().partition(" ")
-                name = rest.partition("[")[2].partition("]")[0].strip()
-                if name == card_id and number.isdigit():
-                    return int(number)
-    except OSError:
-        pass
-
-    raise RuntimeError(
-        f"No ALSA card with id {card_id!r}. Cards the container can see:\n"
-        + _read_cards()
-    )
-
-
-def _read_cards() -> str:
-    try:
-        with open("/proc/asound/cards") as fh:
-            return fh.read()
-    except OSError as exc:
-        return f"(could not read /proc/asound/cards: {exc})"
+    index = alsa.card_index(card_id)
+    if index is None:
+        raise RuntimeError(
+            f"No ALSA card with id {card_id!r}. Cards visible here:\n"
+            + alsa.describe_cards()
+            + "\n\nIf that list is empty inside the container but `cat "
+              "/proc/asound/cards` works on the host, libasound could not be "
+              "loaded -- check that /dev/snd is mapped in and that the "
+              "container user is in the audio group (AUDIO_GID)."
+        )
+    return index
 
 
 def resolve_device(spec: str | int, kind: str) -> int:
@@ -324,10 +305,11 @@ def resolve_device(spec: str | int, kind: str) -> int:
                     kind, raw, index, idx, dev["name"],
                 )
                 return idx
+        from . import alsa
         raise RuntimeError(
             f"ALSA card {card_id!r} is card {index}, but no PortAudio {kind} "
             f"device wraps it. Devices:\n{sd.query_devices()}\n\nCards:\n"
-            + _read_cards()
+            + alsa.describe_cards()
         )
 
     needle = raw.lower()
@@ -340,11 +322,13 @@ def resolve_device(spec: str | int, kind: str) -> int:
     ]
 
     if not matches:
+        from . import alsa
         raise RuntimeError(
             f"No {kind} device matching {spec!r}. Available devices:\n"
             f"{sd.query_devices()}\n\n"
             "If that spec is a udev-pinned ALSA card id, it will never match a "
-            f"device name -- use CARD={spec} instead. Cards:\n" + _read_cards()
+            f"device name -- use CARD={spec} instead. Cards:\n"
+            + alsa.describe_cards()
         )
 
     if len(matches) > 1:

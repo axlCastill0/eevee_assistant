@@ -72,6 +72,11 @@ export function useServices(): ServicesState {
         const next: Record<string, Sample[]> = { ...prev }
         for (const svc of res.services) {
           const trail = next[svc.name] ?? []
+          // Two polls can land in the same millisecond -- StrictMode invokes
+          // the mount effect twice in dev, and a retry can do it in
+          // production. Sparkline keys its bars by `t`, so a duplicate is a
+          // React key collision as well as a bogus sample.
+          if (trail.length > 0 && trail[trail.length - 1].t === now) continue
           next[svc.name] = [...trail, { t: now, healthy: svc.healthy }].slice(-HISTORY)
         }
         return next
