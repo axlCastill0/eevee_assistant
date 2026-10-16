@@ -439,17 +439,27 @@ Carried over from the prototype, all learned the hard way:
 
 ## 13. The wake word
 
-The default is **"hey eevee"**, a `heed` export that lives in the repo at
-`hey_eevee_model/` (44 KB). Install it into `models/`:
+The default is **`hey_jarvis`**, an openWakeWord model baked into the image.
+It needs no files in `models/` and no configuration.
+
+**It was "hey eevee" between 2026-10-15 and 2026-10-16.** That model is a
+`heed` export and it works, but on this Pi it fired on non-speech room noise
+even with the threshold raised to 0.9, so the default went back (USER
+DECISION). To try it again:
 
 ```bash
-./scripts/install-wake-model.sh
+./scripts/install-wake-model.sh          # copies both files into models/
+# then in infra/docker/.env:
+#   VOICE_WAKE_WORD=models/hey_eevee.onnx
 cd infra/docker && docker compose restart voice
 ```
 
 That copies `wake.onnx` -> `models/hey_eevee.onnx` and `wake.json` ->
-`models/hey_eevee.json`, which is where `VOICE_WAKE_WORD` already points. No
-`.env` change and no image rebuild: `models/` is a bind mount.
+`models/hey_eevee.json`. No image rebuild: `models/` is a bind mount.
+
+**If you switch back, clear `VOICE_WW_THRESHOLD`.** A threshold tuned for one
+model means nothing to the other: 0.9 is a sensible tightening for the heed
+model and leaves `hey_jarvis` effectively deaf.
 
 **Both files are required.** The `.json` is not documentation -- it carries the
 calibrated threshold (0.603), the mel parameters, the filter cut-offs and the

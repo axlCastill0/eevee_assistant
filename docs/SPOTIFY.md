@@ -208,6 +208,55 @@ Points worth knowing:
 
 ---
 
+## 5b. Voice commands
+
+Added 2026-10-16. Five intents, all of them fast-path matched so they answer
+in about a second instead of paying the SLM's ~4 s:
+
+| Say | Does |
+|---|---|
+| "play", "resume", "music on" | resumes, and names the track if it knows it |
+| "pause", "stop the music" | pauses |
+| "next", "skip", "skip this song" | next track |
+| "previous", "go back", "last song" | previous track |
+| "play it again", "start it over", "restart" | restarts the current song |
+
+"Restart" is a **seek to zero**, not the previous-track call: Spotify's
+`/previous` is device-dependent — some clients restart the current song when
+you are a few seconds in, others always step back one — and "play it again"
+should never be a coin flip.
+
+Every Spotify failure gets its own spoken sentence, because they need
+opposite reactions from whoever is standing there:
+
+| Spotify says | The assistant says |
+|---|---|
+| no active device | "Nothing's playing. Start something on Spotify first and I can take it from there." |
+| 403, free account | "Spotify only lets Premium accounts control playback…" |
+| not connected | "Spotify isn't connected. You can link it on the dashboard's music page." |
+| no credentials | "Spotify isn't set up on this machine yet." |
+| 429 | "Spotify's asking me to slow down. Try again in a moment." |
+| unreachable | "I can't reach Spotify." |
+
+One special case worth knowing: pausing something **already paused** returns
+403 from Spotify, which is the same code a free account gets for any write.
+The handler re-checks playback state before believing it, so "pause" on
+paused music says "Already paused" rather than sending you off to check your
+subscription.
+
+Skips deliberately do **not** announce the new track: Spotify needs a beat to
+settle after a skip, and asking immediately returns the song you just left —
+the assistant would confidently name the wrong thing.
+
+**New intents need the voice container restarted**, because it fetches the
+catalogue once at startup:
+
+```bash
+cd infra/docker && docker compose restart voice
+```
+
+---
+
 ## 6. Routes
 
 All under `/spotify`, all requiring `X-API-Key` **except the callback**:

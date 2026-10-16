@@ -160,6 +160,40 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     (re.compile(r"(check|show)\s+(the\s+|my\s+)?timers?", re.I),
      "timer_status", None),
 
+    # -- music ------------------------------------------------------------
+    # Ordered carefully against the rules above and below:
+    #   "stop the music" must NOT reach cancel_timer (it does not say timer)
+    #   "play it again"  must NOT reach repeat_last (repeat_last claims
+    #                    "say that again", which is a different sentence)
+    # These are anchored on an explicit music/song/track noun wherever the
+    # verb alone is ambiguous. A bare "stop" stays unmatched and goes to the
+    # SLM, because a bare "stop" could mean the timer that is ringing.
+    (re.compile(r"(play|resume|unpause|continue)(\s+(the\s+)?(music|song|track|playback|it))?", re.I),
+     "play_music", None),
+    (re.compile(r"(music|song|playback)\s+(on|back\s+on)", re.I), "play_music", None),
+
+    (re.compile(r"(pause|stop)\s+(the\s+)?(music|song|track|playback|spotify)", re.I),
+     "pause_music", None),
+    (re.compile(r"pause(\s+it)?", re.I), "pause_music", None),
+
+    (re.compile(r"(next|skip)(\s+(the\s+|this\s+)?(song|track|one))?", re.I),
+     "next_track", None),
+    (re.compile(r"skip\s+(it|ahead|forward)", re.I), "next_track", None),
+
+    (re.compile(r"(previous|last|go\s+back(\s+a)?)(\s+(song|track|one))?", re.I),
+     "previous_track", None),
+    (re.compile(r"(play\s+)?the\s+(previous|last)\s+(song|track|one)", re.I),
+     "previous_track", None),
+
+    # Restart is a seek to zero, not the previous-track call -- see
+    # intents._restart_track for why those are different operations.
+    (re.compile(r"(restart|replay)(\s+(the\s+|this\s+)?(song|track|it))?", re.I),
+     "restart_track", None),
+    (re.compile(r"(play|start)\s+(it|the\s+song|this\s+song)\s+(again|over)", re.I),
+     "restart_track", None),
+    (re.compile(r"(start|from)\s+(it\s+)?(over|the\s+(start|beginning))", re.I),
+     "restart_track", None),
+
     # -- set_theme --------------------------------------------------------
     # The item group is the theme name; the handler maps synonyms.
     # "go" is deliberately NOT a verb here: "go dark" means the screen, not
@@ -251,10 +285,30 @@ class FastPath:
         if not self.enabled or not text:
             return None
 
-        probe = _strip_trailing(text.strip().rstrip(".,!?").strip())
-        if not probe:
+        raw = text.strip().rstrip(".,!?").strip()
+        if not raw:
             return None
 
+        # TWO PASSES: the literal sentence first, then the one with trailing
+        # filler removed.
+        #
+        # Stripping is what lets "what's the time right now" match the plain
+        # time rule, but it also eats words that are load-bearing in other
+        # sentences -- "again" is filler in "what's the time again" and the
+        # entire meaning of "play it again". Trying the raw text first means
+        # the more specific reading wins when there is one, and the stripped
+        # fallback still catches everything it used to.
+        stripped = _strip_trailing(raw)
+        probes = [raw] if stripped == raw else [raw, stripped]
+
+        for probe in probes:
+            hit = self._match_one(probe)
+            if hit is not None:
+                return hit
+
+        return None
+
+    def _match_one(self, probe: str) -> Optional[tuple[str, Optional[str]]]:
         for pattern, intent, group in self.rules:
             m = pattern.fullmatch(probe)
             if not m:

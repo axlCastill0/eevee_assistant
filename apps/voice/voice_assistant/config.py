@@ -95,6 +95,10 @@ VAD_NATIVE_FRAME = 512 * DOWNSAMPLE
 # ============================================================================
 # Left unset, each model decides: a heed export carries the threshold it was
 # calibrated at in its sidecar. This default only applies to openWakeWord.
+#
+# NOTE a threshold tuned for one model is meaningless for the other. If
+# VOICE_WW_THRESHOLD was raised to 0.9 for the heed model, UNSET IT when going
+# back to hey_jarvis -- 0.9 on openWakeWord is deaf, not strict.
 WW_THRESHOLD_IS_SET = bool(os.environ.get("VOICE_WW_THRESHOLD", "").strip())
 WW_THRESHOLD = _float("VOICE_WW_THRESHOLD", 0.5)
 VAD_SPEECH_THRESHOLD = _float("VOICE_VAD_THRESHOLD", 0.5)
@@ -125,16 +129,18 @@ MODEL_DIR = _str("VOICE_MODEL_DIR", "models")
 
 VAD_MODEL_PATH = _str("VOICE_VAD_MODEL", f"{MODEL_DIR}/silero_vad.onnx")
 
-# The "hey eevee" model, a heed export: models/hey_eevee.onnx plus its
-# models/hey_eevee.json sidecar. Install both with
-# scripts/install-wake-model.sh (it copies them out of hey_eevee_model/).
+# "hey_jarvis", an openWakeWord model baked into the image. Back to being the
+# default on 2026-10-16: the "hey eevee" heed export fired on non-speech room
+# noise even at a 0.9 threshold (USER DECISION).
 #
 # Other accepted values:
-#   hey_jarvis               an openWakeWord bundled name
+#   models/hey_eevee.onnx    the heed export (needs its .json sidecar beside
+#                            it; scripts/install-wake-model.sh puts both in
+#                            place). Still supported, still works.
 #   models/my_word.onnx      an openWakeWord export (no .json beside it)
 # wake_word.make_detector() picks the engine by looking for the sidecar, so
-# nothing else has to be configured when switching.
-WAKE_WORD_NAME = _str("VOICE_WAKE_WORD", f"{MODEL_DIR}/hey_eevee.onnx")
+# switching back is one env var and a restart.
+WAKE_WORD_NAME = _str("VOICE_WAKE_WORD", "hey_jarvis")
 
 # Only needed if the sidecar is not named after the model (hey_eevee.onnx ->
 # hey_eevee.json). Empty means "derive it".

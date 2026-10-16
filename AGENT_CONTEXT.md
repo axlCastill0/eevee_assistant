@@ -301,7 +301,14 @@ models:
     - qwen2.5-1.5b-instruct-q5_k_m.gguf (1.2GB)
     - en_US-amy-medium.onnx + .onnx.json (60MB)
 
-wake_word: "hey eevee" (heed export, models/hey_eevee.onnx) DEFAULT 2026-10-15
+wake_word: hey_jarvis (openWakeWord, baked into the image) DEFAULT AGAIN
+  2026-10-16. USER DECISION: the "hey eevee" heed export fired on non-speech
+  room noise even at VOICE_WW_THRESHOLD=0.9. It is still supported and still
+  installed by scripts/install-wake-model.sh; set VOICE_WAKE_WORD=
+  models/hey_eevee.onnx to go back, AND clear VOICE_WW_THRESHOLD -- 0.9 is a
+  sensible tightening for heed and leaves hey_jarvis deaf.
+  Everything below describes the heed path, which is unchanged.
+wake_word_heed: "hey eevee" (models/hey_eevee.onnx) WAS the default 2026-10-15
   engine_picked_by: wake_word.make_detector() -> wake_heed.is_heed_model(),
     which is TRUE when a .json sidecar sits beside the .onnx. No sidecar, or a
     bare name like hey_jarvis, falls through to the openWakeWord wrapper.
@@ -1110,6 +1117,10 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | wake word back to `hey_jarvis` | USER: "hey eevee" fired on non-speech room noise even at 0.9. The heed engine stays in the code and the model stays installable -- only the default moved |
+| 2026-10-16 | five music intents (play/pause/next/previous/restart) | USER. `restart` is a seek to zero rather than Spotify's device-dependent `/previous`, so "play it again" is never a coin flip |
+| 2026-10-16 | every Spotify failure gets its own spoken sentence | "no Premium" and "nothing is playing anywhere" need opposite reactions from the person standing there; one generic apology would be useless. Mapped once in `intents._music_problem` so five handlers cannot drift |
+| 2026-10-16 | fastpath matches the RAW sentence before the filler-stripped one | "again" is filler in "what's the time again" and the entire meaning of "play it again". Two passes, literal first, keeps both |
 | 2026-10-16 | Dashboard (timers+alarms) is the home route; systems grid demoted to "systems" | USER: the new page is the main one. An unrecognised hash lands there too |
 | 2026-10-16 | timers in memory, alarms persisted | opposite lifetimes for opposite reasons: a countdown is only meaningful relative to now, a weekly schedule is still true after a reboot |
 | 2026-10-16 | timers monotonic, alarms wall clock | the Pi has no RTC and steps its clock at boot. A countdown must ignore that step; an alarm must follow it |
@@ -1216,6 +1227,13 @@ passed:
      NOT VERIFIED: audible playback (no speaker here), the voice path end to
      end on the Pi, and anything about Chromium's autoplay policy in kiosk
      mode."
+  - "2026-10-16 macOS: music intents exercised directly against a stubbed
+     spotify module -- all five succeed and each of the seven failure statuses
+     (plus an unknown one) produces its own distinct sentence; 'pause' on
+     already-paused music answers 'Already paused' instead of the Premium
+     warning. Fastpath: 25 phrasings, 13 of them music, zero regressions on
+     time/theme/health/weather/timer/repeat.
+     NOT VERIFIED: against a real Spotify account or on the Pi."
   - "2026-10-16 macOS: timer intents exercised directly -- set/cancel/status
      wording, the ambiguity branch when two timers run, and fast-path regexes
      for 15 phrasings with no regressions on time/theme/health/weather."

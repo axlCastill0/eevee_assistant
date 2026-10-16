@@ -29,6 +29,7 @@ from typing import Callable, Optional
 
 import events
 import services
+import spotify
 import timers
 import sysinfo
 import weather
@@ -176,10 +177,38 @@ INTENTS: dict[str, Intent] = {
         description="ask how much time is left on a timer, or what timers are running",
         needs_item=False,
     ),
+    "play_music": Intent(
+        name="play_music",
+        description="start or resume music playback. play, resume, unpause",
+        needs_item=False,
+    ),
+    "pause_music": Intent(
+        name="pause_music",
+        description="pause or stop the music that is playing",
+        needs_item=False,
+    ),
+    "next_track": Intent(
+        name="next_track",
+        description="skip to the next song",
+        needs_item=False,
+    ),
+    "previous_track": Intent(
+        name="previous_track",
+        description="go back to the previous song",
+        needs_item=False,
+    ),
+    "restart_track": Intent(
+        name="restart_track",
+        description=(
+            "start the current song over from the beginning. 'play it again', "
+            "'from the start'"
+        ),
+        needs_item=False,
+    ),
     "unknown": Intent(
         name="unknown",
         description=(
-            "anything else. music, alarms, lights, maths, jokes — all unknown. "
+            "anything else. alarms, lights, maths, jokes — all unknown. "
             "when in doubt, use this"
         ),
         needs_item=False,
@@ -391,16 +420,17 @@ def _list_capabilities(item: Optional[str]) -> tuple[str, bool]:
     count = len([n for n in INTENTS if n != "unknown"])
 
     return _pick(
-        f"I can check the system, tell you the time and date, read the "
-        f"weather, report how hot and how long this machine has been running, "
-        f"and control the panel. {count} things in total.",
+        f"I can set timers, control the music, check the system, tell you the "
+        f"time and date, read the weather, report how hot and how long this "
+        f"machine has been running, and control the panel. {count} things in total.",
 
-        f"Ask me how the system's doing, what the time or date is, what the "
-        f"weather's like, how hot the Pi is running, or tell me to change the "
-        f"panel's theme or turn the screen off.",
+        f"Ask me to set a timer, play or skip the music, how the system's "
+        f"doing, what the time or date is, what the weather's like, or tell me "
+        f"to change the panel's theme or turn the screen off.",
 
-        f"System health, time, date, weather, uptime, temperature, and the "
-        f"dashboard itself — theme and screen. That's {count} things I answer to.",
+        f"Timers, music, system health, time, date, weather, uptime, "
+        f"temperature, and the dashboard itself — theme and screen. That's "
+        f"{count} things I answer to.",
     ), True
 
 
@@ -577,6 +607,125 @@ def _running_summary(running: list) -> str:
     return f"{', '.join(parts[:-1])}, and {parts[-1]}."
 
 
+# ---------------------------------------------------------------------------
+# Music
+# ---------------------------------------------------------------------------
+# Every failure Spotify can hand back means something DIFFERENT to the person
+# standing there, so each one gets its own sentence. "Sorry, that didn't work"
+# for all of them would be the easy version and a useless one: "you have no
+# Premium" and "nothing is playing anywhere" need opposite reactions.
+
+def _music_problem(status: str) -> Optional[str]:
+    """A spoken explanation for a failed command, or None if it succeeded.
+
+    Kept as one table so the five music handlers cannot drift apart, and so
+    adding a status to spotify.py has exactly one place to be worded.
+    """
+    if status == "ok":
+        return None
+
+    return {
+        # The big one in practice: the Web API is a remote control and cannot
+        # originate audio. Saying "no device" would be jargon; saying what to
+        # do about it is the whole point.
+        "no_device": _pick(
+            "Nothing's playing. Start something on Spotify first and I can take it from there.",
+            "There's no active Spotify device. Start a song on your phone and I'll control it.",
+        ),
+        "premium_required": (
+            "Spotify only lets Premium accounts control playback, so I can't do that one."
+        ),
+        "unauthorized": (
+            "Spotify isn't connected. You can link it on the dashboard's music page."
+        ),
+        "unconfigured": (
+            "Spotify isn't set up on this machine yet."
+        ),
+        "rate_limited": _pick(
+            "Spotify's asking me to slow down. Try again in a moment.",
+            "Spotify is rate limiting me right now. Give it a second.",
+        ),
+        "unreachable": _pick(
+            "I can't reach Spotify.",
+            "Spotify isn't responding.",
+        ),
+        "unsupported": "I can't do that to the music.",
+    }.get(status, "Something went wrong with Spotify.")
+
+
+def _play_music(item: Optional[str]) -> tuple[str, bool]:
+    # Asking Spotify what is loaded BEFORE playing lets the confirmation name
+    # the track. The snapshot is cached, so this is usually free.
+    snapshot = spotify.snapshot()
+    track = snapshot.get("item") if snapshot.get("status") == "ok" else None
+
+    problem = _music_problem(spotify.command("play")["status"])
+    if problem:
+        return problem, False
+
+    if track and track.get("title"):
+        artist = track.get("artist")
+        # One sentence, not two: Piper reads a full stop as a pause, and
+        # "Playing Kid A. By Radiohead." lands like two separate thoughts.
+        return _pick(
+            f"Playing {track['title']}" + (f", by {artist}." if artist else "."),
+            f"{track['title']}, playing now.",
+        ), True
+
+    return _pick("Playing.", "Music on."), True
+
+
+def _pause_music(item: Optional[str]) -> tuple[str, bool]:
+    status = spotify.command("pause")["status"]
+
+    # Pausing what is already paused is not a failure worth a complaint, and
+    # Spotify reports it as 403 -- which the generic mapping would read as
+    # "Premium required" and send someone off to check their subscription.
+    if status == "premium_required":
+        snapshot = spotify.snapshot(force=True)
+        if snapshot.get("status") == "ok" and not snapshot.get("is_playing"):
+            return _pick("Already paused.", "It's already stopped."), True
+
+    problem = _music_problem(status)
+    if problem:
+        return problem, False
+
+    return _pick("Paused.", "Music paused."), True
+
+
+def _next_track(item: Optional[str]) -> tuple[str, bool]:
+    problem = _music_problem(spotify.command("next")["status"])
+    if problem:
+        return problem, False
+
+    # Deliberately NOT naming the new track: Spotify needs a beat to settle
+    # after a skip, and asking immediately returns the song we just left,
+    # which would make the assistant announce the wrong title out loud.
+    return _pick("Skipped.", "Next one.", "Skipping."), True
+
+
+def _previous_track(item: Optional[str]) -> tuple[str, bool]:
+    problem = _music_problem(spotify.command("previous")["status"])
+    if problem:
+        return problem, False
+
+    return _pick("Going back.", "Previous song."), True
+
+
+def _restart_track(item: Optional[str]) -> tuple[str, bool]:
+    """Seek to zero, which is a different thing from 'previous'.
+
+    Spotify's previous-track call is device-dependent: some clients restart
+    the current song when you are a few seconds in, others always step back
+    one. "Play it again" should never be a coin flip, so it gets the seek.
+    """
+    problem = _music_problem(spotify.command("restart")["status"])
+    if problem:
+        return problem, False
+
+    return _pick("From the top.", "Starting it over.", "Back to the beginning."), True
+
+
 _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "system_health": _system_health,
     "get_time": _get_time,
@@ -593,6 +742,11 @@ _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "set_timer": _set_timer,
     "cancel_timer": _cancel_timer,
     "timer_status": _timer_status,
+    "play_music": _play_music,
+    "pause_music": _pause_music,
+    "next_track": _next_track,
+    "previous_track": _previous_track,
+    "restart_track": _restart_track,
     "unknown": _unknown,
 }
 

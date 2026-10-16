@@ -545,13 +545,20 @@ def snapshot(force: bool = False) -> dict:
 # controls
 # ---------------------------------------------------------------------------
 
-# Deliberately only these four. Seeking is not exposed: the panel's progress
-# bar is a readout, not a scrubber (USER DECISION 2026-10-16).
+# The four the panel exposes, plus "restart", which only voice uses.
+#
+# `restart` is a seek to zero, NOT the previous-track call. Spotify's
+# /previous is device-dependent -- some clients restart the current track when
+# you are a few seconds in, others always go back one -- so "start this song
+# again" gets an endpoint that does exactly that and nothing else. The panel
+# still has no scrubber: the progress bar is a readout (USER DECISION
+# 2026-10-16), and seeking to a fixed 0 is not scrubbing.
 _COMMANDS = {
-    "previous": ("POST", "/me/player/previous"),
-    "next": ("POST", "/me/player/next"),
-    "play": ("PUT", "/me/player/play"),
-    "pause": ("PUT", "/me/player/pause"),
+    "previous": ("POST", "/me/player/previous", None),
+    "next": ("POST", "/me/player/next", None),
+    "play": ("PUT", "/me/player/play", None),
+    "pause": ("PUT", "/me/player/pause", None),
+    "restart": ("PUT", "/me/player/seek", {"position_ms": 0}),
 }
 
 
@@ -562,7 +569,7 @@ def command(action: str) -> dict:
       no_device         nothing is playing anywhere, so there is nothing to
                         control -- the API cannot start audio by itself
       premium_required  the account is not Premium; reads work, writes do not
-      unsupported       not one of the four commands
+      unsupported       not one of the known commands
     """
     if action == "toggle":
         action = "pause" if snapshot().get("is_playing") else "play"
@@ -575,8 +582,8 @@ def command(action: str) -> dict:
     if not is_connected():
         return {"status": "unauthorized"}
 
-    method, path = _COMMANDS[action]
-    status, _ = _authed_call(method, path)
+    method, path, query = _COMMANDS[action]
+    status, _ = _authed_call(method, path, query)
 
     # The snapshot is now wrong whatever happened, and the UI refetches right
     # after a tap. Clearing beats caching a stale is_playing for 3 seconds.
