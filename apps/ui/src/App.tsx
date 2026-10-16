@@ -20,6 +20,7 @@ import { Home } from './views/Home'
 import { NowPlaying } from './views/NowPlaying'
 import { Settings } from './views/Settings'
 import { Timers } from './views/Timers'
+import { Wake } from './views/Wake'
 
 export default function App() {
   const now = useClock()
@@ -165,11 +166,7 @@ export default function App() {
             the whole screen -- which is what let both grow controls a finger
             can actually use (USER DECISION 2026-10-16). */}
         {route === 'dashboard' && (
-          <Home
-            timers={clock.timers}
-            alarms={clock.data?.alarms.alarms ?? []}
-            services={data}
-          />
+          <Home timers={clock.timers} alarms={clock.data?.alarms.alarms ?? []} />
         )}
 
         {route === 'timers' && (
@@ -179,6 +176,8 @@ export default function App() {
         {route === 'alarms' && (
           <Alarms alarms={clock.data?.alarms.alarms ?? []} onChanged={clock.refresh} />
         )}
+
+        {route === 'wake' && <Wake />}
 
         {route === 'settings' && (
           <Settings

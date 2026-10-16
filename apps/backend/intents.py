@@ -34,6 +34,7 @@ import spotify
 import timers
 import sysinfo
 import weather
+import wol
 
 log = logging.getLogger("intents")
 
@@ -203,6 +204,14 @@ INTENTS: dict[str, Intent] = {
         description=(
             "start the current song over from the beginning. 'play it again', "
             "'from the start'"
+        ),
+        needs_item=False,
+    ),
+    "wake_computer": Intent(
+        name="wake_computer",
+        description=(
+            "wake up, turn on or boot the other computer, the PC, the "
+            "desktop, or 'your brother'. NOT the dashboard screen"
         ),
         needs_item=False,
     ),
@@ -739,6 +748,32 @@ def _restart_track(item: Optional[str]) -> tuple[str, bool]:
     return _pick("From the top.", "Starting it over.", "Back to the beginning."), True
 
 
+def _wake_computer(item: Optional[str]) -> tuple[str, bool]:
+    """Send the magic packet to the one configured machine.
+
+    The machine's name comes from the backend (WOL_NAME), not from the
+    transcript: "wake your brother" and "wake the pc" are the same request,
+    and echoing back whichever words were used would make the assistant sound
+    like it heard a different machine each time.
+    """
+    if not wol.is_configured():
+        return (
+            "No computer is set up to wake. Set WOL_MAC on the backend.",
+            False,
+        )
+
+    sent, detail = wol.send()
+    if not sent:
+        return f"I could not send the wake signal: {detail}.", False
+
+    target = wol.name()
+    return _pick(
+        f"Waking {target} now.",
+        f"Sending the wake signal to {target}.",
+        f"{target.capitalize()} should be starting up.",
+    ), True
+
+
 _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "system_health": _system_health,
     "get_time": _get_time,
@@ -760,6 +795,7 @@ _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "next_track": _next_track,
     "previous_track": _previous_track,
     "restart_track": _restart_track,
+    "wake_computer": _wake_computer,
     "unknown": _unknown,
 }
 

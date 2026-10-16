@@ -36,11 +36,19 @@ const HOURS: DrumItem[] = Array.from({ length: 12 }, (_, n) => ({
   label: String(n + 1),
 }))
 
-/** Five-minute granularity, which is what the ± stepper had. A wheel of 60
- *  rows would be a long flick to cross and nobody sets an alarm for 7:43. */
-const MINUTES: DrumItem[] = Array.from({ length: 12 }, (_, n) => ({
-  value: n * 5,
-  label: String(n * 5).padStart(2, '0'),
+/** Every minute (USER DECISION 2026-10-16: 7:43 has to be settable).
+ *
+ *  Sixty rows is a long flick end to end, which is the cost of the decision.
+ *  It is bearable because the wheel opens on the value already set, so the
+ *  common edit is a nudge of a few rows -- and because the alternative, a
+ *  five-minute grid, made a third of all times simply unreachable.
+ *
+ *  No SECONDS wheel: alarms.FIRE_WINDOW_S is 120s, so a seconds value would
+ *  be decorative -- the alarm can legitimately ring up to two minutes after
+ *  the time shown. Timers are the control that goes to the second. */
+const MINUTES: DrumItem[] = Array.from({ length: 60 }, (_, n) => ({
+  value: n,
+  label: String(n).padStart(2, '0'),
 }))
 
 const MERIDIEM: DrumItem[] = [
@@ -197,11 +205,7 @@ export function Alarms({
             </span>
             <Drum
               items={MINUTES}
-              /* The stored minute may not be on the five-minute grid -- a
-                 hand-edited alarms.json, or an older build. Snap to the
-                 nearest row rather than showing a wheel with nothing
-                 selected. */
-              value={(Math.round(selected.minute / 5) % 12) * 5}
+              value={selected.minute}
               onChange={(minute) => save(day, { minute })}
               ariaLabel="Minute"
             />

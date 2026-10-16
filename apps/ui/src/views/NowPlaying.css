@@ -52,6 +52,47 @@
   animation: fade-in var(--dur-slow) var(--ease);
 }
 
+/* The drifting wrapper. Exists only to carry a transform, so the cover's own
+   clip and shadow are never touched by the motion.
+
+   WHY THREE ELEMENTS AND NOT ONE KEYFRAME
+     One animation loops visibly. Three, on 7s / 11s / 13s, only line up again
+     every ~17 minutes, so the movement reads as drift rather than as a cycle.
+     All three are transform-only, which the Pi composites without repainting
+     anything -- see the shadow note below for what NOT to animate here. */
+.np__cover-float {
+  flex: 0 0 auto;
+  /* Paused by default. The `is-playing` class only RESUMES these; it never
+     adds or removes them, so stopping a track freezes the art where it is
+     instead of snapping back to square. */
+  animation: cover-bob 7s var(--ease) infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+
+.np__cover-float .np__cover {
+  animation: cover-sway 11s var(--ease) infinite;
+  animation-play-state: paused;
+}
+
+.np__cover-float .np__cover-img {
+  /* fade-in still runs once on mount; the drift is the second animation on
+     the same element. Order matters only for the shorthand, not the result. */
+  animation:
+    fade-in var(--dur-slow) var(--ease),
+    cover-breathe 13s var(--ease) infinite;
+  animation-play-state: running, paused;
+}
+
+.np__cover-float.is-playing,
+.np__cover-float.is-playing .np__cover {
+  animation-play-state: running;
+}
+
+.np__cover-float.is-playing .np__cover-img {
+  animation-play-state: running, running;
+}
+
 .np__cover {
   flex: 0 0 auto;
   width: var(--np-size);
@@ -69,7 +110,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: fade-in var(--dur-slow) var(--ease);
 }
 
 .np__cover-empty {
@@ -345,5 +385,41 @@
 
   .np__title {
     font-size: clamp(1.25rem, 5vw, 1.75rem);
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Cover drift. Transform only; amplitudes deliberately small -- this is a
+   10" panel a metre away, and anything larger reads as a wobble rather than
+   as the art being alive.
+   --------------------------------------------------------------------------- */
+@keyframes cover-bob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -1.6%, 0);
+  }
+}
+
+@keyframes cover-sway {
+  0%,
+  100% {
+    transform: rotate(-0.7deg) translate3d(-0.5%, 0, 0);
+  }
+  50% {
+    transform: rotate(0.7deg) translate3d(0.5%, 0, 0);
+  }
+}
+
+@keyframes cover-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
   }
 }

@@ -37,6 +37,9 @@ apps/
     spotify.py        SPOTIFY: OAuth tokens, TTL'd playback snapshot, the four
                       controls, cover-art fetch. urllib, no new deps
     weather.py        Open-Meteo lookup, cached, no API key
+    wol.py            WAKE-ON-LAN: magic packet + a TCP liveness probe for
+                      ONE machine, configured in the environment. Works only
+                      because the backend is network_mode: host
     services.py       SERVICE HEALTH - heartbeat registry + summarize()
     routes/
       __init__.py     Empty, marks package
@@ -52,6 +55,8 @@ apps/
       weather.py      GET /weather. Its OWN route, not a /clock/state field:
                       a cache miss blocks on Open-Meteo and that poll is the
                       one that rings alarms
+      wake.py         GET/POST /wake. Wake-on-LAN; own route for the same
+                      reason (the probe is a TCP connect with a timeout)
       status.py       GET /services - the dashboard's data source
     requirements.txt
     .env.example
@@ -86,6 +91,7 @@ apps/
                       + app grid), Timers.tsx, Alarms.tsx, NowPlaying.tsx
                       (Spotify), Dashboard.tsx (systems grid, route
                       "systems"), Settings.tsx
+                      Wake.tsx ("Home" -- the wake-on-LAN app)
                       (Clock.tsx was DELETED 2026-10-16: it was timers and
                       alarms sharing one page; they are now an app each)
     src/components/RingingBanner.tsx  plays the mp3, Stop button; in the SHELL
@@ -95,7 +101,9 @@ apps/
                       every route: timers/alarms are launched from Home and
                       light the Dashboard entry while open
     src/components/AppHeader.tsx  back-to-launcher header for Timers/Alarms
-    src/components/TimerDial.tsx  drag-to-set duration ring (pointer events)
+    src/components/TimerDial.tsx  drag-to-set duration. TWO rings: outer =
+                      minutes, inner = seconds; the ring is chosen at
+                      touch-down from the radius and never re-tested
     src/components/Drum.tsx       scroll-snap wheel picker (alarm hour/minute)
     src/components/WeatherGlyph.tsx  WMO-code icons, inline SVG
     src/lib/useRoute.ts          hand-written hash router (no react-router)
@@ -189,9 +197,9 @@ ui:
           on the compositor. A JS animation library would add ~50KB and run
           work on the main thread the Pi does not need to do.
   deps: react, react-dom (runtime). Everything else is devDependencies.
-  payload: 280KB js / 86KB gzip, 48KB css / 9KB gzip, 89KB fonts
-           (was 265/82 js and 35/7 css before the launcher + timer/alarm
-            apps landed on 2026-10-16)
+  payload: 283KB js / 87KB gzip, 51KB css / 10KB gzip, 89KB fonts
+           (was 265/82 js and 35/7 css before the launcher, the timer and
+            alarm apps and the wake app landed on 2026-10-16)
   fonts: Inter + JetBrains Mono, SELF-HOSTED, latin subset only, declared by
          hand in index.css. The @fontsource package has no per-subset entry
          and its index.css pulls ~150KB of unused Cyrillic/Greek/Vietnamese.
@@ -426,16 +434,21 @@ home_route: "dashboard" = views/Home.tsx, THE LAUNCHER (REBUILT 2026-10-16).
     only while something is actually playing. WEATHER IS ALWAYS THERE, and is
     the exception on purpose: it is the one thing worth reading when nothing
     is happening, and a home screen that empties to nothing reads as broken.
-  app tiles: each carries a line of live state ("2 running", "5 of 7 on",
-    "1 down"), counted BY STATE -- a paused timer reads "1 paused", never
-    "1 running".
-  grid: sized for THREE columns on a 1024-wide panel, so five tiles wrap to
-    3 + 2 and fill a 600px-tall screen. One row of five left a third of the
-    panel empty and made every tile a smaller target.
+  app tiles: ONLY apps with NO sidebar entry (USER DECISION 2026-10-16).
+    Timers, Alarms, Home(wake). Music/Systems/Settings were removed -- the
+    launcher was a second copy of the rail. Each tile carries a line of live
+    state ("2 running", "5 of 7 on"), counted BY STATE: a paused timer reads
+    "1 paused", never "1 running". The wake tile is deliberately NOT live --
+    a reading there would mean probing that machine's TCP port every few
+    seconds for as long as the panel sits idle on the home screen.
+  grid: rows capped and centred. A stretching row made each tile 300px of
+    mostly nothing once the list dropped to three; add enough apps to wrap to
+    a second row and it fills the panel on its own.
+  NO SHEEN. The tiles had a slow highlight sweep; removed 2026-10-16 (USER).
 
   SIDEBAR UNCHANGED (USER DECISION 2026-10-16). It lists destinations, not
   routes: Dashboard, Music, Systems, Settings pinned to the bottom. Dashboard
-  stays lit while you are inside Timers or Alarms -- see HOME_APPS in
+  stays lit while you are inside Timers, Alarms or Home -- see HOME_APPS in
   lib/useRoute.ts.
 
 timers:
@@ -455,12 +468,19 @@ timers:
     state the panel WANTS, not a toggle verb, so a double tap on a
     touchscreen settles instead of flapping. Idempotent. A ringing timer
     cannot be paused.
-  SCREEN UX (REBUILT 2026-10-16): components/TimerDial.tsx. Drag the ring to
-    set a duration -- one revolution = 60 minutes, 6 deg/minute, wraps
-    counted so two turns is two hours. Snaps to whole minutes, which is the
-    granularity the +/- stepper it replaced had; the sub-minute end is a
-    preset ("30s"). Tapping a preset ARMS the dial rather than starting
-    immediately, so a mis-tap is not a timer you then have to cancel.
+  SCREEN UX (REBUILT 2026-10-16): components/TimerDial.tsx. TWO CONCENTRIC
+    RINGS, both 6 deg per notch:
+      OUTER = minutes, one revolution = 60 minutes.
+      INNER = seconds, one revolution = 60 seconds. Carries into minutes.
+    Which ring you are turning is decided ONCE, at touch-down, from the
+    radius -- never re-tested during the drag. A circular gesture drifts in
+    radius, and re-testing every move would silently switch you from minutes
+    to seconds halfway round.
+    Resolution is 1 SECOND (USER DECISION 2026-10-16), which is also why
+    timers.MIN_DURATION_S dropped from 5 to 1: clamping a dialled 0:03 up to
+    0:05 would make the control lie.
+    Tapping a preset ARMS the dial rather than starting immediately, so a
+    mis-tap is not a timer you then have to cancel.
     WHY A GESTURE AT ALL: there is no keyboard on this panel and no on-screen
     one wanted (USER 2026-10-16), so a text field was never an option and the
     old stepper was 45 taps for a 45-minute timer.
@@ -487,8 +507,15 @@ alarms:
         dot -- two different questions, so two signals.
       - the selected day gets components/Drum.tsx wheel pickers (hour /
         minute / AM-PM), flicked rather than tapped. CSS scroll-snap does the
-        physics; the component only reads which row ended up centred. Minutes
-        stay on the 5-minute grid the stepper had.
+        physics; the component only reads which row ended up centred.
+        MINUTES ARE 0-59, every minute (USER DECISION 2026-10-16). Sixty rows
+        is a long flick end to end; bearable because the wheel opens on the
+        value already set, and the five-minute grid it replaced made a third
+        of all times simply unreachable.
+        NO SECONDS WHEEL, deliberately: FIRE_WINDOW_S is 120s, so an alarm
+        may legitimately ring up to two minutes after the time shown and a
+        seconds value would be decorative. Timers are the control that goes
+        to the second.
       - COPY THIS TIME TO Mon-Fri / Sat-Sun / All 7, which also ENABLES those
         days: "same as Monday" means you want the alarm, not a row that
         merely agrees about a time it will never ring at. This is the single
@@ -522,6 +549,52 @@ theme: still per-browser localStorage, NOT a server setting. A theme belongs
   because that is where a person looks for it.
 ```
 
+## wake on lan ("Home")
+
+```yaml
+purpose: turn on ONE Windows PC on the LAN from the panel or by voice.
+  USER's machine already has WoL enabled in firmware/Windows; nothing here
+  configures the target end.
+
+LOAD-BEARING: network_mode: host
+  apps/backend runs with host networking (infra/docker/docker-compose.yml).
+  A BRIDGED container cannot put a broadcast on the LAN -- the packet dies at
+  docker0, sendto() still succeeds, and nothing ever wakes. If the backend is
+  ever moved off host networking THIS BREAKS SILENTLY. The probe would keep
+  working, which makes it look like the PC is simply ignoring the packet.
+
+packet: 6x 0xFF then the MAC 16 times, UDP broadcast, sent THREE times.
+  A single UDP broadcast may be dropped by any switch on the way and nothing
+  retransmits it. No dependency: `wakeonlan` would be a package for a
+  constant, same call as urllib in weather.py.
+
+probe: TCP connect, default port 3389 (Windows RDP), 0.6s timeout, cached 5s.
+  NOT ICMP: a raw socket needs CAP_NET_RAW, which means a privileged
+  container or a setuid ping in the image. A connect() needs neither.
+  WOL_HOST unset => `online` is null => the panel says "status unknown"
+  rather than drawing an offline dot it has not earned.
+
+voice: intent `wake_computer`. Fast-path patterns sit ABOVE the wake_screen
+  block in voice_assistant/fastpath.py and MUST stay there -- the screen owns
+  bare "wake up" (its own spoken reply tells you to say it) and
+  `(switch|turn) (it) (back) on`, either of which would swallow "turn on the
+  pc". Covers computer/pc/desktop/machine/tower/rig/BROTHER (USER's name for
+  it). Verified 2026-10-16: 18 phrasings match, 16 existing ones unaffected.
+  Remember `docker compose restart voice` -- the pipeline fetches the intent
+  catalogue once at startup.
+
+the machine's name in speech comes from WOL_NAME, never from the transcript:
+  "wake your brother" and "wake the pc" are the same request, and echoing the
+  words back would make the assistant sound like it heard a different
+  machine each time.
+
+ui: views/Wake.tsx, route "wake", titled "Home". The poll tightens from 6s to
+  2s for two minutes after a press, because that is the only window in which
+  "did it come up" is worth asking often, then falls back on its own. The
+  button stays pressable while waiting: a dropped magic packet is real and
+  pressing again is the correct remedy.
+```
+
 ## ui gotchas
 
 ```yaml
@@ -540,6 +613,32 @@ unstable_callback_restarted_audio:
   arrow, and App wraps its stop handlers in useCallback.
   RULE: anything long-lived that an effect owns -- audio, sockets, timers --
   must not have a per-render callback in its dependency array.
+
+dial_lost_a_fast_drag_and_could_not_pass_one_turn:
+  TWO bugs in components/TimerDial.tsx, both found 2026-10-16 by driving the
+  dial with synthesised pointer events, and BOTH present in the single-ring
+  version shipped earlier the same day.
+
+  1) STALE PROP. Each move added its notches to the `seconds` PROP, i.e. to
+     whatever the last render produced. pointermove fires faster than React
+     re-renders, so a run of moves inside one frame every one of them added
+     to the SAME number and only the last survived -- the dial lost most of a
+     fast drag, and would lose more the busier the Pi got.
+     FIX: a ref is the authority during a drag, written before the parent is
+     told, resynced from the prop by an effect.
+
+  2) SINGLE-STEP WRAP. The delta was normalised with one
+     `if (d > 180) d -= 360` / `if (d < -180) d += 360` pair, which corrects
+     exactly one wrap. The anchor is advanced by the degrees SPENT, so on a
+     multi-turn drag it grew past 360 and the second revolution produced
+     deltas of several hundred degrees that one `if` could not bring back
+     into range. The dial then started subtracting: ANY duration over an hour
+     was unreachable by dragging.
+     FIX: `shortestTurn()`, modulo arithmetic, applied to the delta AND to
+     the anchor so it stays in the range `probe` reports.
+
+  RULE: a gesture handler that accumulates must read its running total from a
+  ref, not from a prop, and must reduce angles with modulo, not with an `if`.
 
 sound_cache: /clock/sounds sends Cache-Control: max-age=3600, so a repeat
   test shows ZERO server hits and still plays. Do not read "no request in the
@@ -1044,6 +1143,12 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `WEATHER_LON` | no | backend `weather.py` | as above |
 | `WEATHER_PLACE` | no | backend `weather.py` | spoken aloud ("12 degrees in Toronto"); empty omits it |
 | `WEATHER_UNITS` | no | backend `weather.py` | `celsius` (default) or `fahrenheit` |
+| `WOL_MAC` | no | backend `wol.py` | target MAC; `aa:bb:..`, `aa-bb-..` or bare hex. Unset = the Home app says it is not configured |
+| `WOL_NAME` | no | backend `wol.py` | what the machine is called on screen and out loud; default "the computer" |
+| `WOL_BROADCAST` | no | backend `wol.py` | default `255.255.255.255`; a subnet broadcast (e.g. `192.168.0.255`) if your network drops the global one |
+| `WOL_PORT` | no | backend `wol.py` | default 9. Nothing listens; the NIC firmware reads the frame |
+| `WOL_HOST` | no | backend `wol.py` | IP/hostname for the liveness probe. Unset = no status dot |
+| `WOL_PROBE_PORT` | no | backend `wol.py` | default 3389 (Windows RDP). 445 or 22 work as well |
 | `VOICE_STATE_REPEAT_S` | no | voice `activity.py` | default = `VOICE_HEARTBEAT_INTERVAL_S`; re-sends the current state so the pill survives a backend restart. 0 disables |
 | `SERVICE_STALE_AFTER_S` | no | backend `services.py` | default 45.0; must stay a multiple of the send interval |
 | `BACKEND_VERBOSE` | no | backend `main.py` | DEBUG logs |
@@ -1250,6 +1355,16 @@ xterm_is_required:
 | 2026-10-16 | every Spotify failure gets its own spoken sentence | "no Premium" and "nothing is playing anywhere" need opposite reactions from the person standing there; one generic apology would be useless. Mapped once in `intents._music_problem` so five handlers cannot drift |
 | 2026-10-16 | fastpath matches the RAW sentence before the filler-stripped one | "again" is filler in "what's the time again" and the entire meaning of "play it again". Two passes, literal first, keeps both |
 | 2026-10-16 | Dashboard (timers+alarms) is the home route; systems grid demoted to "systems" | USER: the new page is the main one. An unrecognised hash lands there too |
+| 2026-10-16 | launcher shows ONLY apps without a sidebar entry | USER. Music, Systems and Settings are rail destinations; repeating them as tiles made the home screen a second copy of the navigation instead of a home for the things that have no rail entry |
+| 2026-10-16 | tile sheen removed | USER. A highlight sweeping each tile on a loop is motion with nothing to say; the glance strip is where the panel should be drawing the eye |
+| 2026-10-16 | cover art drifts while a track plays, three transforms on 7s/11s/13s | USER wants motion. Co-prime-ish periods only realign every ~17 minutes, so it reads as drift rather than a loop. Pausing sets animation-play-state rather than removing the animations, so the art freezes where it is instead of snapping back to square |
+| 2026-10-16 | timer dial grew a SECOND ring for seconds; ring chosen at touch-down | USER wants 1-second timers. A circular gesture drifts in radius, so re-testing the radius each move would switch you from minutes to seconds halfway round a turn. Deciding once, at touch-down, means the ring you start on is the ring you keep |
+| 2026-10-16 | timers.MIN_DURATION_S 5 -> 1 | the dial can now express 0:03, and clamping it up to 0:05 would make the control lie about what it is about to do. The old floor existed to stop a spoken "one second" timer firing before the confirmation finished; that is now the rarer harm |
+| 2026-10-16 | alarm minutes 0-59; still NO seconds | USER. The 5-minute grid made a third of all times unreachable. Seconds stay out because FIRE_WINDOW_S is 120s -- an alarm can ring two minutes late by design, so a seconds field would be decorative |
+| 2026-10-16 | wake-on-LAN is a backend feature, NOT a host agent like screen-agent.sh | the backend already runs network_mode: host, so it can broadcast directly. The screen agent exists because a container cannot reach a backlight; nothing equivalent applies here |
+| 2026-10-16 | liveness by TCP connect, not ICMP ping | a raw socket needs CAP_NET_RAW, meaning a privileged container or a setuid ping binary in the image. A connect() to a port Windows already listens on needs neither |
+| 2026-10-16 | one wake target, configured in .env | USER. There is no keyboard on the panel, so a MAC was never going to be typed into Settings, and this is set once |
+| 2026-10-16 | wake_computer fast-path rules sit ABOVE wake_screen | the screen owns bare "wake up" and `(switch\|turn) (it) (back) on`. Anything naming a MACHINE has to be claimed first or it never reaches the new intent |
 | 2026-10-16 | home became a LAUNCHER; timers and alarms split into apps behind it | USER: "a kind of application page". Sharing one screen capped both halves at controls that fit in half a column -- which is how the alarm editor ended up a +/- stepper behind an accordion. A whole screen each is what paid for the dial and the wheel pickers |
 | 2026-10-16 | sidebar stays four destinations; timers/alarms are NOT in the rail | USER: keep the current sidebar. They are apps opened from the launcher, so Dashboard stays lit while you are inside one -- a rail with nothing highlighted reads as "you are nowhere" |
 | 2026-10-16 | glance cards are conditional, EXCEPT weather | a card with nothing to say is noise. Weather is the exception because it is the one thing worth reading when nothing is happening, and a home screen that empties to nothing reads as broken |
@@ -1350,6 +1465,35 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS, REAL backend (uvicorn in a venv) + vite + the browser
+     pane at 1024x600, light AND dark: the launcher trim, the wake app, the
+     two-ring dial and second-level alarms.
+     WAKE: magic packet verified byte for byte against a local UDP listener
+     -- 102 bytes, 6x 0xFF then the MAC 16 times, sent 3 times; a bad or
+     short MAC is refused with a sentence rather than an exception; the probe
+     reports False on a closed port and None with no WOL_HOST. The Home app
+     sent a real packet from the button (backend logged it) and resolved to
+     'the PC is up'. Broadcast was pointed at 127.0.0.1 on purpose -- a dev
+     machine should not spray magic packets across someone's network.
+     VOICE: 18 wake_computer phrasings (computer/pc/desktop/machine/tower/
+     brother, wake/turn on/power on/boot/start up, plus trailing filler) all
+     fast-path to wake_computer, and 16 existing phrasings -- including bare
+     'wake up', 'turn it back on' and 'good night' -- were unaffected.
+     DIAL: wound to 0:00, then a quarter turn = 15:00, one turn = 1:00:00,
+     two turns = 2:00:00, twelve turns clamped at 12:00:00, inner ring 120deg
+     = 0:20, inner 270deg carried 36:10 -> 36:55. 2:07 dialled and started
+     reached the backend as '2 minutes 7 seconds'; a 3-second timer was
+     accepted and rang (the old floor was 5s).
+     ALARMS: minute wheel is 60 rows and saved Friday 10:43 AM through the
+     real API -- a time the 5-minute grid could not express.
+     MUSIC: the three drift animations resolve at 7s/11s/13s, are paused by
+     default, all run under .is-playing, and fade-in still runs on mount; the
+     sheen keyframe is gone from the bundle.
+     NOT VERIFIED: a REAL wake of the actual Windows PC (no such machine
+     here, and the broadcast was deliberately looped back), real touch drags
+     and flicks on the Pi, the drift against real album art (no Spotify
+     credentials in this environment), and the animations' real cost on a Pi
+     GPU."
   - "2026-10-16 macOS, REAL backend (uvicorn in a venv) + vite + the browser
      pane at 1024x600, light AND dark: the launcher/timers/alarms rebuild.
      Launcher showed the conditional glance strip (timer card with its

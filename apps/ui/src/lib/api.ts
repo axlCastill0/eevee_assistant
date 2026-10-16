@@ -112,6 +112,23 @@ export interface WeatherState {
   units?: 'celsius' | 'fahrenheit'
 }
 
+/** The one Wake-on-LAN target. `online` is null when no WOL_HOST is set to
+ *  probe — the panel then says "status unknown" rather than drawing a
+ *  confident offline dot it has not earned. */
+export interface WakeState {
+  configured: boolean
+  name: string
+  mac: string
+  online: boolean | null
+  probe_host: string
+}
+
+export interface WakeResult extends WakeState {
+  sent: boolean
+  /** A sentence, worded by the backend so the panel and the assistant agree. */
+  detail: string
+}
+
 export interface SoundEntry {
   file: string
   label: string
@@ -294,6 +311,14 @@ export function soundUrl(file: string) {
 
 export function fetchWeather() {
   return get<WeatherState>('/weather')
+}
+
+export function fetchWake() {
+  return get<WakeState>('/wake')
+}
+
+export function sendWake() {
+  return post<WakeResult>('/wake', {})
 }
 
 export function fetchNowPlaying() {

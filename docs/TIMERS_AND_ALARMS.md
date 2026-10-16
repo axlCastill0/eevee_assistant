@@ -59,9 +59,17 @@ play the sound", and a tap starts it. The flag just removes the tap.
 
 ### From the screen
 
-**Drag the dial.** One full turn is 60 minutes, so a quarter turn is fifteen;
-keep turning past the top and it keeps counting up, to a 12-hour ceiling. It
-snaps to whole minutes.
+**Drag the dial.** It has two rings:
+
+- the **outer** ring is minutes — one full turn is 60 of them, so a quarter
+  turn is fifteen. Keep turning past the top and it keeps counting up, to a
+  12-hour ceiling.
+- the **inner** ring is seconds — one full turn is 60, and it carries into
+  the minutes when it passes the top.
+
+Which ring you get is decided by where your finger lands, once, when you
+touch down — so a sloppy circle never switches you from minutes to seconds
+halfway round. The ring you are turning brightens; the other dims.
 
 The presets (30s, 1, 3, 5, 10, 15, 30, 45) **arm** the dial rather than
 starting straight away — so a mis-tap is not a timer you then have to cancel,
@@ -124,8 +132,12 @@ The **week strip** across the top is both the navigation and the overview:
 every day shows its time, and a filled dot means it is armed. Tap a day to
 edit it below.
 
-The time is set with **wheels** — flick the hour, the minutes (in fives) and
-AM/PM. The big switch arms the day.
+The time is set with **wheels** — flick the hour, the minutes (every minute,
+0–59) and AM/PM. The big switch arms the day.
+
+There is no seconds wheel, deliberately: an alarm fires within a two-minute
+window of its time, so a seconds value would not be honoured. Timers are the
+control that goes to the second.
 
 **Copy this time to** `Mon–Fri`, `Sat–Sun` or `All 7` writes the selected
 day's time across that group *and turns those days on*, which is the fast way

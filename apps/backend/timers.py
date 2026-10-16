@@ -45,9 +45,16 @@ from typing import Optional
 log = logging.getLogger("timers")
 
 # A spoken "set a timer for eight hours" is almost certainly a misheard
-# transcript, and a 30-second cap on the other end stops "one second" timers
-# that fire before the assistant finishes saying it set one.
-MIN_DURATION_S = 5
+# transcript, so the upper bound stays.
+#
+# The lower bound was 5 seconds, to stop a spoken "one second" timer firing
+# before the assistant finished saying it had set one. It is 1 as of
+# 2026-10-16: the screen dial now sets seconds directly (USER DECISION), and
+# clamping a dialled 0:03 up to 0:05 would make the control lie about what it
+# is about to do. The voice path can still ask for a 1-second timer and the
+# confirmation will land after it fires -- a worse answer to a question
+# almost nobody asks than a dial that cannot be trusted.
+MIN_DURATION_S = 1
 MAX_DURATION_S = 12 * 3600
 
 

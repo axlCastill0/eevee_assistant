@@ -203,9 +203,10 @@ something is playing. **Weather is the exception and is always there**: it is
 the one thing worth reading when nothing is happening, and a home screen that
 empties to nothing reads as broken.
 
-The tile grid is sized for **three columns** on a 1024-wide panel, so five
-tiles wrap to 3 + 2 and fill the height. One row of five left a third of the
-screen empty and made every tile a smaller target.
+The grid holds **only apps that have no sidebar entry**. Music, Systems and
+Settings are rail destinations; repeating them as tiles made the home screen
+a second copy of the navigation rather than a home for the things with
+nowhere else to live.
 
 **Timers** and **Alarms** are apps behind those tiles, with the whole screen
 each. Timers are also settable by voice; alarms are screen-only. Full feature
@@ -213,9 +214,10 @@ notes are in `docs/TIMERS_AND_ALARMS.md`.
 
 The touch decision that shapes both: there is no keyboard on this panel and no
 on-screen one wanted, so neither a text field nor Chromium's native time
-picker is available. That leaves **gestures**: a duration dial you drag (one
-turn = an hour) and scroll-snap **wheels** for the alarm time. Both replaced
-`−`/`+` steppers that cost 45 taps for a 45-minute timer. The alarm editor
+picker is available. That leaves **gestures**: a two-ring duration dial you
+drag (outer turn = an hour, inner turn = a minute) and scroll-snap **wheels**
+for the alarm time. Both replaced `−`/`+` steppers that cost 45 taps for a
+45-minute timer. The alarm editor
 still **expands in place** rather than opening a modal, so the rest of the
 week stays visible while one day changes.
 
@@ -513,3 +515,14 @@ On a macOS dev host, against the real backend, at 1280x800 and 1024x600:
 
 Not verified — no hardware: real touch gestures, the Docker image building
 (no daemon on the dev host), Chromium kiosk, and actual framerate on a Pi.
+
+**Home** — wake-on-LAN. One machine, one button, and a status dot that only
+promises something when `WOL_HOST` is set for the backend to probe. Named in
+`.env`, because there is no keyboard on this panel and a MAC address is set
+once. Full notes in `AGENT_CONTEXT.md` under `## wake on lan`.
+
+The cover art on the **Music** view drifts while a track is playing — three
+small transforms on 7s, 11s and 13s periods, so they only realign every
+seventeen minutes and the motion never reads as a loop. Pausing freezes it
+where it is rather than snapping back. All transform-only, like everything
+else that moves here.

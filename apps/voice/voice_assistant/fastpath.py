@@ -226,6 +226,26 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     (re.compile(r"(i'?m\s+going\s+to\s+)?(bed|sleep)", re.I), "sleep_screen", None),
     (re.compile(r"(turn|shut)\s+(it\s+)?off", re.I), "sleep_screen", None),
 
+    # -- wake_computer ----------------------------------------------------
+    # DELIBERATELY ABOVE wake_screen. The screen owns bare "wake up" (its own
+    # spoken reply tells you to say it), and `(switch|turn) (it) (back) on`
+    # below is broad enough to swallow "turn on the pc". Anything naming a
+    # MACHINE has to be claimed here first, or it never reaches this intent.
+    (re.compile(r"wake(\s+up)?\s+(the\s+|my\s+|your\s+)?"
+                r"(computer|pc|desktop|machine|tower|rig|brother)", re.I),
+     "wake_computer", None),
+    (re.compile(r"(turn|switch|power)\s+on\s+(the\s+|my\s+|your\s+)?"
+                r"(computer|pc|desktop|machine|tower|rig|brother)", re.I),
+     "wake_computer", None),
+    (re.compile(r"(boot|start)(\s+up)?\s+(the\s+|my\s+|your\s+)?"
+                r"(computer|pc|desktop|machine|tower|rig|brother)", re.I),
+     "wake_computer", None),
+    # "the computer on", "pc on" -- the same shortened shape the screen rules
+    # allow for "screen on".
+    (re.compile(r"(the\s+|my\s+|your\s+)?"
+                r"(computer|pc|desktop|brother)\s+on", re.I),
+     "wake_computer", None),
+
     (re.compile(r"(turn\s+)?(the\s+)?(screen|display|panel|monitor)\s+(on|back\s+on)", re.I),
      "wake_screen", None),
     (re.compile(r"turn\s+on\s+(the\s+)?(screen|display|panel|monitor)", re.I),

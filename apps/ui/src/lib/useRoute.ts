@@ -27,6 +27,7 @@ export const ROUTES = [
   'dashboard',
   'timers',
   'alarms',
+  'wake',
   'music',
   'systems',
   'settings',
@@ -38,7 +39,7 @@ const DEFAULT: Route = 'dashboard'
 
 /** Apps that live behind the Dashboard tile. The sidebar uses this to keep
  *  Dashboard lit while you are inside one. */
-export const HOME_APPS: readonly Route[] = ['timers', 'alarms']
+export const HOME_APPS: readonly Route[] = ['timers', 'alarms', 'wake']
 
 function parse(hash: string): Route {
   const name = hash.replace(/^#\/?/, '').split('?')[0]

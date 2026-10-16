@@ -25,7 +25,7 @@
  *   rather than a button -- a tile that looks pressable and does nothing is
  *   worse than one that plainly does not.
  */
-import type { AlarmEntry, ServicesResponse, TimerEntry } from '../lib/api'
+import type { AlarmEntry, TimerEntry } from '../lib/api'
 import { artUrl } from '../lib/api'
 import { duration } from '../lib/format'
 import { navigate, type Route } from '../lib/useRoute'
@@ -38,11 +38,9 @@ import './Home.css'
 export function Home({
   timers,
   alarms,
-  services,
 }: {
   timers: TimerEntry[]
   alarms: AlarmEntry[]
-  services: ServicesResponse | null
 }) {
   const weather = useWeather()
   // Mounted here, so the poll stops the moment you leave the launcher. The
@@ -132,11 +130,9 @@ export function Home({
       </section>
 
       <section className="home__apps" aria-label="Apps">
-        {appTiles({ timers, alarms, services, spotifyPlaying: Boolean(playing) }).map(
-          (tile, n) => (
-            <AppTile key={tile.route} tile={tile} index={n} />
-          ),
-        )}
+        {appTiles({ timers, alarms }).map((tile, n) => (
+          <AppTile key={tile.route} tile={tile} index={n} />
+        ))}
       </section>
     </main>
   )
@@ -284,19 +280,18 @@ const ICON = {
   strokeLinejoin: 'round' as const,
 }
 
+/* ONLY apps that are NOT in the sidebar (USER DECISION 2026-10-16). Music,
+   Systems and Settings are rail destinations; repeating them here made the
+   launcher a second copy of the navigation rather than a place where the
+   things without a rail entry live. */
 function appTiles({
   timers,
   alarms,
-  services,
-  spotifyPlaying,
 }: {
   timers: TimerEntry[]
   alarms: AlarmEntry[]
-  services: ServicesResponse | null
-  spotifyPlaying: boolean
 }): Tile[] {
   const enabled = alarms.filter((a) => a.enabled)
-  const down = services?.services.filter((s) => !s.healthy).length ?? 0
 
   // Counted by state, not just by length: "1 running" over a timer that is
   // actually paused is the launcher telling you something untrue about the
@@ -338,45 +333,19 @@ function appTiles({
       ),
     },
     {
-      route: 'music',
-      name: 'Music',
-      status: spotifyPlaying ? 'playing' : 'paused',
-      live: spotifyPlaying,
+      route: 'wake',
+      name: 'Home',
+      // Deliberately NOT a live reading. This tile would otherwise have to
+      // poll the backend's TCP probe from the launcher, and a probe that
+      // runs whenever the panel is idle on the home screen is a knock on
+      // that machine's port every few seconds, forever. The app itself
+      // polls; the tile just opens it.
+      status: 'wake the PC',
       icon: (
         <svg {...ICON} aria-hidden>
-          <circle cx="7" cy="18" r="3" />
-          <circle cx="18" cy="15.5" r="3" />
-          <path d="M10 18V6.5l11-2v11" />
-        </svg>
-      ),
-    },
-    {
-      route: 'systems',
-      name: 'Systems',
-      status:
-        services === null
-          ? 'checking'
-          : down === 0
-            ? 'all healthy'
-            : `${down} down`,
-      live: down > 0,
-      icon: (
-        <svg {...ICON} aria-hidden>
-          <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
-          <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
-          <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
-          <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
-        </svg>
-      ),
-    },
-    {
-      route: 'settings',
-      name: 'Settings',
-      status: 'sounds, screen, theme',
-      icon: (
-        <svg {...ICON} aria-hidden>
-          <circle cx="12" cy="12" r="3.2" />
-          <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1" />
+          <path d="M3.5 5.5h17v11h-17z" />
+          <path d="M9 20.5h6M12 16.5v4" />
+          <path d="M12 8.5v3.2" />
         </svg>
       ),
     },
@@ -391,10 +360,6 @@ function AppTile({ tile, index }: { tile: Tile; index: number }) {
       style={{ '--i': index } as React.CSSProperties}
       onClick={() => navigate(tile.route)}
     >
-      {/* A highlight that crosses the tile once on a long loop. Its own
-          element so the animation is a transform on a layer, not a repaint
-          of the tile's background. */}
-      <span className="apptile__sheen" aria-hidden />
       <span className="apptile__icon">{tile.icon}</span>
       <span className="apptile__name">{tile.name}</span>
       <span className="apptile__status">{tile.status}</span>

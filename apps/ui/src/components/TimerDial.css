@@ -30,8 +30,9 @@
 .dial__track,
 .dial__fill {
   fill: none;
-  stroke-width: 7;
   stroke-linecap: round;
+  /* No transition on the fills: the stroke follows a finger, and easing a
+     value that is already being dragged makes the ring lag behind the knob. */
 }
 
 .dial__track {
@@ -39,10 +40,43 @@
   transition: stroke var(--dur-theme) var(--ease);
 }
 
-.dial__fill {
+/* Outer ring: minutes. Thicker, because it is the one you reach for first
+   and the one a thumb lands on by default. */
+.dial__track,
+.dial__fill--min {
+  stroke-width: 7;
+}
+
+.dial__fill--min {
   stroke: var(--accent);
-  /* No transition: the stroke follows a finger, and easing a value that is
-     already being dragged makes the ring lag behind the knob. */
+}
+
+/* Inner ring: seconds. Thinner and in the secondary colour, so the two are
+   never confused at a glance and the minutes ring stays the headline. Its
+   track is a shade darker than the outer one: at the smaller radius,
+   --surface-3 on white was all but invisible, and this ring is a drag target
+   as much as a readout. */
+.dial__track--sec {
+  stroke-width: 4.5;
+  stroke: var(--border-strong);
+}
+
+.dial__fill--sec {
+  stroke-width: 4.5;
+  stroke: var(--info);
+}
+
+/* Whichever ring is being turned comes forward; the other recedes. This is
+   the only feedback that says which unit your finger is currently changing,
+   so it is worth the two rules. */
+.dial.is-on-minutes .dial__fill--sec,
+.dial.is-on-minutes .dial__knob--sec {
+  opacity: 0.35;
+}
+
+.dial.is-on-seconds .dial__fill--min,
+.dial.is-on-seconds .dial__knob--min {
+  opacity: 0.35;
 }
 
 .dial__mark {
@@ -63,26 +97,59 @@
 
 .dial__knob {
   position: absolute;
-  top: 0;
   left: 50%;
-  /* 7% of the dial is half the ring's stroke plus a little, so the knob sits
-     centred on the track at any size. */
-  width: 15%;
   aspect-ratio: 1;
-  transform: translate(-50%, -32%);
   border-radius: var(--radius-full);
-  background: var(--accent);
   box-shadow: var(--shadow-2);
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+/* CENTRED WITH MARGINS, NOT translate(-50%, ...).
+   `transform` has to stay free for the grab scale below -- a transform that
+   also carried the centring would be overwritten by the animation and the
+   knob would jump to the orbit's corner the moment you touched it. The orbit
+   is square (the dial has aspect-ratio 1), so a percentage margin resolves
+   against the same length in both axes. */
+.dial__knob--min {
+  top: 0;
+  width: 15%;
+  margin-left: -7.5%;
+  margin-top: -4.8%;
+  background: var(--accent);
+}
+
+/* The seconds knob rides the inner track, at r=33 of a 50 radius -- 11% of
+   the dial below the top edge. */
+.dial__knob--sec {
+  top: 11%;
+  width: 11%;
+  margin-left: -5.5%;
+  margin-top: -3.7%;
+  background: var(--info);
+}
+
+/* The inner orbit is inset so its knob lands on the inner ring rather than
+   the outer one. */
+.dial__knob-orbit--sec {
+  inset: 0;
 }
 
 /* Grows under the finger while dragging: a fingertip covers the knob, so the
    feedback has to be visible around the edge of it. */
-.dial.is-dragging .dial__knob {
+/* Grows under the finger while dragging: a fingertip covers the knob, so the
+   feedback has to be visible around the edge of it. Only the knob actually
+   being dragged grows. */
+.dial.is-on-minutes .dial__knob--min,
+.dial.is-on-seconds .dial__knob--sec {
   animation: grab var(--dur-fast) var(--ease-out) forwards;
 }
 
-.dial.is-dragging .dial__value {
+.dial.is-on-minutes .dial__value {
   color: var(--accent);
+}
+
+.dial.is-on-seconds .dial__value {
+  color: var(--info);
 }
 
 .dial__readout {

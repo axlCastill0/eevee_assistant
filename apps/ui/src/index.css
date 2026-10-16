@@ -408,17 +408,6 @@ button {
   }
 }
 
-/* A highlight that crosses a tile once. Used on the launcher as an idle
-   shimmer, slow enough not to be noise in a room. translate only. */
-@keyframes sheen {
-  from {
-    transform: translate3d(-120%, 0, 0) skewX(-18deg);
-  }
-  to {
-    transform: translate3d(320%, 0, 0) skewX(-18deg);
-  }
-}
-
 /* The soft colour wash behind the launcher. Two blobs on opposite phases,
    moving slowly; a Pi composites a translating layer for free, where it would
    repaint an animated gradient every frame. */

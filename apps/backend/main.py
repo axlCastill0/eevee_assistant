@@ -11,7 +11,7 @@ except ImportError:
     pass
 
 from auth import require_api_key
-from routes import clock, screen, spotify, status, voice, weather
+from routes import clock, screen, spotify, status, voice, wake, weather
 
 # Uvicorn configures its own loggers but not the root logger, so module-level
 # loggers (routes.voice, intents) would otherwise be silent.
@@ -49,6 +49,10 @@ app.include_router(spotify.public_router, prefix="/spotify", tags=["spotify"])
 # on the network, and that poll is the one that rings alarms. See
 # routes/weather.py.
 app.include_router(weather.router, prefix="/weather", tags=["weather"])
+
+# Wake-on-LAN. Works ONLY because the backend runs with network_mode: host --
+# a bridged container's broadcast never reaches the LAN. See wol.py.
+app.include_router(wake.router, prefix="/wake", tags=["wake"])
 
 @app.get("/", dependencies=[Depends(require_api_key)])
 def root():

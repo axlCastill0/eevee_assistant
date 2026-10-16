@@ -103,15 +103,23 @@ export function NowPlaying({ active }: { active: boolean }) {
 
       {item ? (
         <div className="np__stage">
-          <div className="np__cover">
-            {art ? (
-              /* key on the id so a track change remounts the <img> and the
-                 fade-in replays instead of the new cover popping in. */
-              <img key={item.art_id} className="np__cover-img" src={art}
-                   alt={`${item.album} cover`} draggable={false} />
-            ) : (
-              <div className="np__cover-empty" aria-hidden>♪</div>
-            )}
+          {/* The cover drifts while a track plays. Three transforms on three
+              nested elements with co-prime-ish periods (7s / 11s / 13s), so
+              they only realign every few minutes and the loop never reads as
+              a loop. Pausing does not REMOVE the animations -- it sets
+              `animation-play-state: paused`, so the art stops where it is
+              instead of snapping back to square. */}
+          <div className={`np__cover-float${data?.is_playing ? ' is-playing' : ''}`}>
+            <div className="np__cover">
+              {art ? (
+                /* key on the id so a track change remounts the <img> and the
+                   fade-in replays instead of the new cover popping in. */
+                <img key={item.art_id} className="np__cover-img" src={art}
+                     alt={`${item.album} cover`} draggable={false} />
+              ) : (
+                <div className="np__cover-empty" aria-hidden>♪</div>
+              )}
+            </div>
           </div>
 
           <div className="np__panel">

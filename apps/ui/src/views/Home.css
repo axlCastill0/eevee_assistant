@@ -220,14 +220,17 @@ button.glance:active {
   z-index: 1;
   flex: 1;
   display: grid;
-  /* Sized so a 1024-wide panel gets THREE columns, not five. Five tiles then
-     wrap to 3 + 2 rows, which fills the height a 600px panel has left after
-     the glance strip -- one row of five left a third of the screen empty --
-     and makes every tile a much larger touch target on the way. A wider
-     panel fits them all on one row again, where the empty height is not
-     there to fill in the first place. */
-  grid-template-columns: repeat(auto-fit, minmax(clamp(200px, 24vw, 260px), 1fr));
-  grid-auto-rows: minmax(118px, 1fr);
+  /* The grid now holds only the apps WITHOUT a sidebar entry, so there are a
+     handful rather than five. A wide floor keeps them big: three across on a
+     1024-wide panel, and the row stretches to fill the height left by the
+     glance strip. */
+  grid-template-columns: repeat(auto-fit, minmax(clamp(220px, 26vw, 300px), 1fr));
+  /* Capped, and the rows centred in whatever height is left. With only the
+     apps that have no sidebar entry there is one row, and a stretching row
+     made each tile 300px of mostly nothing. Add enough apps to wrap to two
+     rows and this fills the panel on its own. */
+  grid-auto-rows: minmax(118px, 200px);
+  align-content: center;
   gap: clamp(var(--space-2), 1.4vw, var(--space-4));
   min-height: 0;
   overflow-y: auto;
@@ -299,29 +302,6 @@ button.glance:active {
   color: var(--text-faint);
 }
 
-/* A slow highlight crossing each tile, staggered so the grid reads as one
-   wave. 9s apart is often enough to feel alive and rare enough that it is not
-   a distraction behind a conversation. */
-.apptile__sheen {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 28%;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--text) 4%, transparent),
-    transparent
-  );
-  animation: sheen 2.6s var(--ease) infinite;
-  animation-delay: calc(var(--i) * 900ms);
-  /* The gap between sweeps. An animation cannot hold a pause, so the long
-     period comes from running it on a 9s cycle with a 2.6s visible portion:
-     `sheen` ends off-screen and the delay below restarts it. */
-  animation-duration: 9s;
-}
-
 /* A 600px-tall panel shows the strip and one row of tiles. Shrink both
    rather than scrolling: the launcher is the one screen that should never
    need a scroll to show you what is on it. */
@@ -336,7 +316,7 @@ button.glance:active {
   }
 
   .home__apps {
-    grid-auto-rows: minmax(96px, 1fr);
+    grid-auto-rows: minmax(96px, 150px);
   }
 
   .apptile {
