@@ -13,6 +13,10 @@ import { updateSettings, type ClockState } from '../lib/api'
 import type { ThemeMode } from '../lib/useTheme'
 import './Settings.css'
 
+/** Minutes. 0 is "never", and is first because it is the default and the
+ *  option a wall panel usually wants. */
+const TIMEOUTS = [0, 2, 5, 10, 15, 30, 60]
+
 const THEMES: { id: ThemeMode; label: string }[] = [
   { id: 'light', label: 'Light' },
   { id: 'dark', label: 'Dark' },
@@ -32,7 +36,11 @@ export function Settings({
 }) {
   const [error, setError] = useState<string | null>(null)
 
-  const save = (values: { timer_sound?: string; alarm_sound?: string }) => {
+  const save = (values: {
+    timer_sound?: string
+    alarm_sound?: string
+    screen_timeout_min?: string
+  }) => {
     setError(null)
     void updateSettings(values).then(onChanged, (err) =>
       setError(err instanceof Error ? err.message : 'Could not save'),
@@ -60,6 +68,27 @@ export function Settings({
         sounds={sounds}
         onChange={(file) => save({ alarm_sound: file })}
       />
+
+      <div className="settings__row">
+        <div className="settings__label">
+          Turn the screen off after
+          <span className="settings__hint">
+            No touch for this long and the panel blanks. The backlight goes
+            with it if the screen agent is running on the Pi.
+          </span>
+        </div>
+        <select
+          className="settings__select"
+          value={settings?.screen_timeout_min ?? '0'}
+          onChange={(e) => save({ screen_timeout_min: e.target.value })}
+        >
+          {TIMEOUTS.map((minutes) => (
+            <option key={minutes} value={String(minutes)}>
+              {minutes === 0 ? 'Never' : `${minutes} minutes`}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="settings__row">
         <div className="settings__label">

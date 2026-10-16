@@ -796,7 +796,85 @@ i3 -C -c ~/.config/i3/config && echo "config OK"
 start, show an error bar, and launch nothing — which looks exactly like i3 not
 starting.
 
-### 8.5 Reboot
+### 8.5 The screen agent (real screen off)
+
+The dashboard can black itself out on its own, but a black page on a lit
+panel is still a lit panel — in a dark room it is just as bright. Switching
+the actual backlight needs something on the host: the browser cannot, and
+neither can the backend, which is in a container with no access to the device.
+
+`scripts/screen-agent.sh` is that piece. It polls the dashboard's own nginx
+(which injects the API key, so the script holds no secret) and switches the
+display whenever the state changes.
+
+Four things change it:
+
+| | |
+|---|---|
+| the top-bar power button | off |
+| "screen off", "lights out", "good night", "turn it off" | off |
+| no touch for 30 minutes (Settings) | off |
+| a touch anywhere, **or the wake word firing at all** | on |
+
+That last one matters: saying "hey jarvis" to a dark panel wakes it before you
+have finished the sentence, so you never have to touch a black screen you have
+already spoken to. It triggers on the pipeline reporting `listening` and
+nothing later in the utterance, which is why "turn the screen off" does not
+immediately undo itself.
+
+It picks a method at startup, in this order:
+
+| Method | For | Needs |
+|---|---|---|
+| `/sys/class/backlight/*/bl_power` | DSI panels, incl. the official 7" | write access, see below |
+| `wlr-randr --output … --off` | Wayland / labwc | `WAYLAND_DISPLAY` in its env |
+| `xset dpms force off` | X11 / i3 | `DISPLAY` in its env |
+| `vcgencmd display_power 0` | HDMI, Pi-specific | `/dev/vcio` (the `video` group) |
+
+**Backlight permissions.** The sysfs file is root-owned, so give your user
+write access once with a udev rule — otherwise the agent says so at startup
+and falls through to a coarser method:
+
+```bash
+sudo tee /etc/udev/rules.d/90-backlight.rules >/dev/null <<'EOF'
+SUBSYSTEM=="backlight", ACTION=="add", \
+  RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power", \
+  RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power"
+EOF
+sudo usermod -aG video "$USER"
+sudo reboot
+```
+
+**Start it with the session**, so it inherits the display variables. Add it
+next to the kiosk launcher — in the labwc autostart:
+
+```bash
+echo '$HOME/eevee_assistant/scripts/screen-agent.sh >> /tmp/screen-agent.log 2>&1 &' \
+  >> ~/.config/labwc/autostart
+```
+
+or in `~/.config/i3/config`:
+
+```
+exec --no-startup-id $HOME/eevee_assistant/scripts/screen-agent.sh
+```
+
+**Check it:**
+
+```bash
+~/eevee_assistant/scripts/screen-agent.sh      # run in the foreground once
+```
+
+It prints the method it chose, then a line per change. A `401` means it is
+pointed at the backend instead of nginx — use `http://127.0.0.1:8080/api/screen`
+(the default), or set `SCREEN_AGENT_KEY`. If it reports no method at all, no
+sysfs backlight was found and neither compositor tool was on `PATH`; install
+`wlr-randr` (labwc) or `x11-xserver-utils` (i3).
+
+Without the agent everything still works — the panel blacks out, the button
+and the voice commands still do something — the backlight just stays on.
+
+### 8.6 Reboot
 
 ```bash
 sudo reboot
@@ -804,7 +882,7 @@ sudo reboot
 
 It should come up straight into the dashboard.
 
-### 8.6 When the screen stays black
+### 8.7 When the screen stays black
 
 **Capture the real error.** This is the single most useful command, because
 `Xorg.0.log` records only X server activity and says nothing about a client

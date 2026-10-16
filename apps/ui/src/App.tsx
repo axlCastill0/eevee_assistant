@@ -6,9 +6,10 @@ import { ScreenVeil } from './components/ScreenVeil'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { VoiceDialog } from './components/VoiceDialog'
-import { stopAlarm, stopRingingTimers } from './lib/api'
+import { setScreen, stopAlarm, stopRingingTimers } from './lib/api'
 import { useClock } from './lib/useClock'
 import { useClockState } from './lib/useClockState'
+import { useIdle } from './lib/useIdle'
 import { useRoute } from './lib/useRoute'
 import { useServices } from './lib/useServices'
 import { useTheme } from './lib/useTheme'
@@ -44,6 +45,23 @@ export default function App() {
     [refreshClock],
   )
 
+  // Local state drives the veil so a tap is instant; the POST is what tells
+  // the host agent to switch the actual backlight, and the poll below keeps
+  // this in step with the other two things that can change it (a voice
+  // command, or the button pressed in another browser).
+  const sleepScreen = useCallback(
+    (source: string) => {
+      setScreenOff(true)
+      void setScreen(false, source).then(refreshClock)
+    },
+    [refreshClock],
+  )
+
+  const wakeScreen = useCallback(() => {
+    setScreenOff(false)
+    void setScreen(true, 'touch').then(refreshClock)
+  }, [refreshClock])
+
   // Commands from the assistant: theme changes and screen blanking. Keyed on
   // the command object's identity, which is fresh for every command, so
   // saying "dark mode" twice applies twice rather than being swallowed as an
@@ -70,6 +88,24 @@ export default function App() {
         break
     }
   }, [command, choose])
+
+  // Follow the backend. A voice "screen off" reaches the dashboard twice: as
+  // a WebSocket command (instant, handled above) and as this state (up to a
+  // second later). The second is what makes a browser opened afterwards, or
+  // one that missed the command, agree with the panel.
+  const serverScreenOn = clock.data?.screen.on
+  useEffect(() => {
+    if (serverScreenOn !== undefined) setScreenOff(!serverScreenOn)
+  }, [serverScreenOn])
+
+  // Blank after a spell with no touch, when Settings asks for it. Zero, the
+  // default, disables it entirely rather than setting a very long timer.
+  const timeoutMin = Number(clock.data?.settings.screen_timeout_min ?? '0')
+  const idleMs = Number.isFinite(timeoutMin) && timeoutMin > 0 ? timeoutMin * 60_000 : 0
+  const idle = useIdle(idleMs)
+  useEffect(() => {
+    if (idle && !screenOff) sleepScreen('idle')
+  }, [idle, screenOff, sleepScreen])
 
   // The event stream only reports what the pipeline SAYS it is doing, so a
   // pipeline that died mid-utterance would leave the pill stuck on green
@@ -112,6 +148,7 @@ export default function App() {
             }}
             timerCount={clock.timers.filter((t) => !t.ringing).length}
             alarmSoon={clock.alarmSoon}
+            onSleep={() => sleepScreen('button')}
           />
         )}
 
@@ -173,7 +210,7 @@ export default function App() {
         onStopAlarm={dismissAlarm}
       />
 
-      <ScreenVeil on={screenOff} onDismiss={() => setScreenOff(false)} />
+      <ScreenVeil on={screenOff} onDismiss={wakeScreen} />
 
       {open && (
         <DetailSheet

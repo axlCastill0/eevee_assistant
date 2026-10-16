@@ -17,6 +17,7 @@ export function TopBar({
   voice,
   timerCount,
   alarmSoon,
+  onSleep,
 }: {
   now: Date
   clockSynced: boolean
@@ -28,6 +29,7 @@ export function TopBar({
   timerCount: number
   /** An alarm is set to go off within 24 hours. */
   alarmSoon: boolean
+  onSleep: () => void
 }) {
   const { hm, seconds, meridiem } = clockTime(now)
 
@@ -70,6 +72,23 @@ export function TopBar({
         </div>
 
         <StatusIcons timerCount={timerCount} alarmSoon={alarmSoon} />
+
+        {/* Screen off. Last in the row because it is the only destructive
+            control up here -- destructive in the sense that it hides
+            everything else -- and because a thumb reaching the corner should
+            not pass over the status icons on the way. */}
+        <button
+          type="button"
+          className="topbar__sleep"
+          aria-label="Turn the screen off"
+          onClick={onSleep}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+               strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 3v9" />
+            <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
+          </svg>
+        </button>
       </div>
     </header>
   )

@@ -3,17 +3,17 @@ import './ScreenVeil.css'
 /**
  * Black-out overlay for "screen off".
  *
- * WHAT THIS IS NOT
- *   It does not power the display down. A browser cannot do that, and the
- *   backend runs in a container with no access to the host's compositor. What
- *   it does is kill the light coming off a panel that is otherwise bright
- *   enough to notice from across a dark room, which is what "turn the screen
- *   off" actually means to the person saying it at night.
+ * WHAT THIS IS, AND WHAT ACTUALLY KILLS THE BACKLIGHT
+ *   This overlay only blacks out the picture. On its own that leaves the
+ *   panel lit, which in a dark room is as bright as it ever was -- the
+ *   complaint that prompted the real fix on 2026-10-16.
  *
- *   True DPMS power-off needs a helper on the host (`wlopm --off \\*` under
- *   labwc, or `xset dpms force off` under X11) and something to call it. That
- *   is a worthwhile upgrade; this is the version that works today with no new
- *   privileges.
+ *   The backlight is switched by `scripts/screen-agent.sh`, which runs on the
+ *   Pi outside Docker (neither a browser nor a container can reach the
+ *   device) and follows `GET /screen`. This veil still exists because it is
+ *   instant where the agent polls: the picture goes black immediately and the
+ *   backlight follows within a couple of seconds. It also covers the case
+ *   where no agent is installed, which is how this behaved before.
  *
  * It stays tappable on purpose: the assistant is still listening and "wake up"
  * works, but a touch is faster and nobody should have to talk to a black

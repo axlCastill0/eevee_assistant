@@ -216,6 +216,15 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     (re.compile(r"(blank|dim|sleep)\s+(the\s+)?(screen|display)", re.I),
      "sleep_screen", None),
     (re.compile(r"good\s*night", re.I), "sleep_screen", None),
+    # Added 2026-10-16 after the screen agent landed and "screen off" became a
+    # thing people actually say to this panel rather than a nicety.
+    (re.compile(r"(screen|display|panel|monitor)\s+(off|down)", re.I),
+     "sleep_screen", None),
+    (re.compile(r"(shut|switch)\s+(off\s+)?(the\s+)?(screen|display|panel|monitor)(\s+off)?", re.I),
+     "sleep_screen", None),
+    (re.compile(r"lights?\s+out", re.I), "sleep_screen", None),
+    (re.compile(r"(i'?m\s+going\s+to\s+)?(bed|sleep)", re.I), "sleep_screen", None),
+    (re.compile(r"(turn|shut)\s+(it\s+)?off", re.I), "sleep_screen", None),
 
     (re.compile(r"(turn\s+)?(the\s+)?(screen|display|panel|monitor)\s+(on|back\s+on)", re.I),
      "wake_screen", None),
@@ -226,6 +235,9 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     # Bare "wake up" is the screen. sleep_screen's spoken reply tells the user
     # to say exactly this, so it must not land on greeting.
     (re.compile(r"wake\s+up", re.I), "wake_screen", None),
+    (re.compile(r"(screen|display|panel|monitor)\s+on", re.I), "wake_screen", None),
+    (re.compile(r"(switch|turn)\s+(it\s+)?(back\s+)?on", re.I), "wake_screen", None),
+    (re.compile(r"(i'?m\s+)?(awake|back)", re.I), "wake_screen", None),
 
     # -- get_weather ------------------------------------------------------
     (re.compile(r"(what('?s| is)\s+)?(the\s+)?weather(\s+like)?(\s+outside|\s+today)?", re.I),

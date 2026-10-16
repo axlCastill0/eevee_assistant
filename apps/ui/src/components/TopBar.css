@@ -106,3 +106,31 @@
   color: var(--text-faint);
   line-height: 1;
 }
+
+/* ---- screen off --------------------------------------------------------- */
+.topbar__sleep {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition:
+    transform var(--dur-fast) var(--ease),
+    color var(--dur) var(--ease),
+    background-color var(--dur-theme) var(--ease),
+    border-color var(--dur-theme) var(--ease);
+}
+
+.topbar__sleep svg {
+  width: 20px;
+  height: 20px;
+}
+
+.topbar__sleep:active {
+  transform: scale(0.92);
+  color: var(--text);
+  background: var(--surface-3);
+}

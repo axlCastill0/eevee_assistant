@@ -28,6 +28,7 @@ from datetime import datetime
 from typing import Callable, Optional
 
 import events
+import screen
 import services
 import spotify
 import timers
@@ -358,6 +359,11 @@ def _set_theme(item: Optional[str]) -> tuple[str, bool]:
 
 
 def _sleep_screen(item: Optional[str]) -> tuple[str, bool]:
+    # BOTH, and they do different jobs. The command blacks the dashboard out
+    # instantly over the WebSocket; the state is what the host helper polls to
+    # actually cut the backlight, and what any browser connecting later reads
+    # to know the panel is meant to be dark.
+    screen.set_on(False, "voice")
     events.hub.publish_command("sleep_screen")
     return _pick(
         "Dimming the screen. Say wake up when you need it.",
@@ -367,6 +373,7 @@ def _sleep_screen(item: Optional[str]) -> tuple[str, bool]:
 
 
 def _wake_screen(item: Optional[str]) -> tuple[str, bool]:
+    screen.set_on(True, "voice")
     events.hub.publish_command("wake_screen")
     return _pick(
         "Screen's back.",

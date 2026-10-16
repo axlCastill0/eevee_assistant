@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 import alarms
+import screen
 import settings
 import timers
 from auth import require_api_key
@@ -36,6 +37,10 @@ def state():
         "timers": timers.state(),
         "alarms": alarms.state(),
         "settings": settings.state(),
+        # Included here, not fetched separately: the dashboard polls this once
+        # a second anyway, and the veil has to follow a voice command or the
+        # top-bar button pressed on another browser.
+        "screen": screen.state(),
     }
 
 

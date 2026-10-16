@@ -99,6 +99,12 @@ export interface SoundEntry {
   label: string
 }
 
+export interface ScreenState {
+  on: boolean
+  changed_at: number
+  source: string
+}
+
 export interface ClockState {
   timers: { timers: TimerEntry[]; ringing: TimerEntry[] }
   alarms: {
@@ -109,9 +115,12 @@ export interface ClockState {
   settings: {
     timer_sound: string
     alarm_sound: string
+    /** Minutes of no touch before the panel blanks. "0" = never. */
+    screen_timeout_min: string
     sounds: SoundEntry[]
     media_dir: string
   }
+  screen: ScreenState
 }
 
 export class ApiError extends Error {
@@ -240,8 +249,18 @@ export function stopAlarm() {
   return post<{ stopped: boolean }>('/clock/alarms/stop', {})
 }
 
-export function updateSettings(values: { timer_sound?: string; alarm_sound?: string }) {
+export function updateSettings(values: {
+  timer_sound?: string
+  alarm_sound?: string
+  screen_timeout_min?: string
+}) {
   return put<ClockState['settings']>('/clock/settings', values)
+}
+
+/** `source` is logged by the backend: it is the first thing worth knowing
+ *  when a panel blanks for no apparent reason. */
+export function setScreen(on: boolean, source: string) {
+  return post<ScreenState>('/screen', { on, source })
 }
 
 /** Same-origin audio, streamed by the backend out of the media directory. */

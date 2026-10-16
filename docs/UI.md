@@ -144,7 +144,10 @@ the pill are the two things that must be readable whatever page is up.
   bottom. 68px+ targets.
 ```
 
-The top bar is a **status strip, not a control strip**. The theme toggle moved
+The top bar carries one control: a power button that blanks the screen. It is
+last in the row because it is the only thing up there that hides everything
+else, and because a thumb reaching the corner should not pass over the status
+icons on the way. Everything else up there is **status, not control**. The theme toggle moved
 to Settings on 2026-10-16 to make room for status icons: a stopwatch when
 timers are running (with a count when there are several) and a bell when an
 alarm is due within 24 hours. Neither is a countdown and neither is a button —
@@ -196,11 +199,33 @@ The ringing banner is rendered by the **shell**, not by this view, so a timer
 that ends while the panel is on Music still shows and is still stoppable. The
 poll behind it lives in the shell for the same reason.
 
-**Settings** — three rows. Two are server-side (timer and alarm end sounds,
+**Settings** — four rows now. Two are server-side (timer and alarm end sounds,
 chosen from whatever is in `media/`); the theme is not, and stays in this
 browser's localStorage. A theme belongs to a display — a phone opening the
 dashboard can be light while the wall panel is dark — and the voice command
 `set_theme` writes to that same local store.
+
+#### Screen off
+
+Three things blank the panel — the top-bar button, a voice command, and an
+idle timeout (30 minutes by default, changeable in Settings) — and all three
+write one piece of backend state (`GET/POST /screen`). The dashboard follows
+it, so a voice "screen off" blanks a browser that was opened afterwards too.
+
+Two things wake it: a touch anywhere, and **any wake-word trigger**. The
+backend wakes the screen when the pipeline reports `listening`, so speaking to
+a dark panel lights it up before you have finished the sentence. Deliberately
+only on `listening` — waking on `speaking` too would make "turn the screen
+off" switch the panel straight back on while it answered.
+
+The veil in the UI is instant but cosmetic. The **backlight** is switched by
+`scripts/screen-agent.sh` running on the Pi outside Docker, because neither a
+browser nor a container can reach the device; it polls that same state. See
+"The screen agent" in `README_PI.md`. Without it the panel still goes black
+and still wakes on touch — it is just not actually dark.
+
+Touch input keeps working with the backlight off, which is what makes
+tap-to-wake possible at all.
 
 **Systems** — the original dashboard, unchanged:
 

@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 import events
+import screen
 import services
 from auth import API_KEY_HEADER, require_api_key
 from intents import INTENTS, handle
@@ -107,6 +108,21 @@ async def voice_state(req: VoiceStateRequest):
     the fastest possible handler — the pipeline is waiting on this call before
     it starts recording.
     """
+    # ANY voice trigger wakes the screen (USER DECISION 2026-10-16). The wake
+    # word firing is proof someone is there, and having to touch a dark panel
+    # after already saying its name is the kind of thing that makes an
+    # assistant feel broken.
+    #
+    # "listening" ONLY, deliberately. The later stages of the same utterance
+    # would otherwise undo the command they are carrying out: "turn the screen
+    # off" goes listening -> thinking -> (intent sets it off) -> speaking, and
+    # waking on "speaking" would switch the panel straight back on.
+    if req.state == "listening" and not screen.is_on():
+        screen.set_on(True, "wake word")
+        # Instant for any dashboard already connected; the host agent picks it
+        # up from the state on its next poll.
+        events.hub.publish_command("wake_screen")
+
     event = events.hub.publish(req.state, transcript=req.transcript, speech=req.speech)
     # debug, not info: there are four of these per utterance and the
     # interesting ones (transcript, speech) are already logged by /intent.

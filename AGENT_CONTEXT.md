@@ -29,7 +29,11 @@ apps/
     sysinfo.py        host uptime + SoC temperature, read from /proc and /sys
     timers.py         TIMERS: monotonic deadlines, duration parsing, in memory
     alarms.py         ALARMS: 7 weekday slots, wall clock, persisted to state/
-    settings.py       timer/alarm sound choice + the media/ sound library
+    settings.py       timer/alarm sound choice, screen idle timeout, media/
+    screen.py         SCREEN POWER STATE. In memory. Written by the top-bar
+                      button, voice, and the idle timer; READ BY THE HOST
+                      AGENT, which is the only thing that can switch a
+                      backlight
     spotify.py        SPOTIFY: OAuth tokens, TTL'd playback snapshot, the four
                       controls, cover-art fetch. urllib, no new deps
     weather.py        Open-Meteo lookup, cached, no API key
@@ -40,7 +44,8 @@ apps/
                       /voice/intent, /voice/state, WS /voice/events
       spotify.py      /spotify/now-playing|command|art|status|login|code|
                       disconnect (keyed) + /spotify/callback (KEYLESS)
-      clock.py        /clock/state (ONE poll for timers+alarms+settings),
+      screen.py       /screen GET+POST. Polled by scripts/screen-agent.sh
+      clock.py        /clock/state (ONE poll for timers+alarms+settings+screen),
                       /clock/timers, /clock/alarms/<weekday>, /clock/settings,
                       /clock/sounds/<file>
       status.py       GET /services - the dashboard's data source
@@ -84,6 +89,7 @@ apps/
     src/lib/useSpotify.ts        1Hz poll + local progress interpolation
     src/lib/coverColors.ts       two dominant cover colours off a 32x32 canvas
     src/lib/useClockState.ts     1Hz /clock/state poll + local countdown
+    src/lib/useIdle.ts           pointer/key idle timer for screen auto-sleep
     vite.config.ts    Dev-only /api proxy that injects the key like nginx does
     package.json
     .env.example      Dev server only; NOT compiled into the bundle
@@ -125,6 +131,9 @@ docs/
 scripts/
   fetch-voice-models.sh      Downloads ~1.3GB into models/ (gitignored)
   install-wake-model.sh      Copies hey_eevee_model/ -> models/hey_eevee.{onnx,json}
+  screen-agent.sh            HOST-SIDE, runs in the kiosk session (NOT Docker).
+                             Polls /api/screen and switches the display:
+                             sysfs bl_power -> wlr-randr -> xset -> vcgencmd
 hey_eevee_model/             COMMITTED. "hey eevee" heed export + its README.
                              wake.onnx (fp32), wake.int8.onnx, wake.json.
 models/                      GITIGNORED. Bind-mounted read-only into voice.
@@ -956,6 +965,9 @@ secrets: never hardcode a key in source, compose, docs, or this file
 | `SPOTIFY_REDIRECT_URI` | no | backend `spotify.py` | default `http://127.0.0.1:8000/spotify/callback`; must match the Spotify dashboard EXACTLY. `localhost` is rejected by Spotify |
 | `SPOTIFY_TOKEN_PATH` | no | backend `spotify.py` | default `/app/state/spotify.json`; must be writable or authorization is lost on restart |
 | `MEDIA_DIR` | no | backend `settings.py` | default `/app/media`; the sound library |
+| `SCREEN_AGENT_URL` | no | `scripts/screen-agent.sh` | default `http://127.0.0.1:8080/api/screen` (through nginx, which adds the key) |
+| `SCREEN_AGENT_KEY` | no | `scripts/screen-agent.sh` | only when pointing the agent straight at the backend, which requires the header |
+| `SCREEN_AGENT_INTERVAL` | no | `scripts/screen-agent.sh` | seconds between polls; default 2 |
 | `ALARMS_PATH` | no | backend `alarms.py` | default `/app/state/alarms.json` |
 | `SETTINGS_PATH` | no | backend `settings.py` | default `/app/state/settings.json` |
 | `WEATHER_LAT` | no | backend `weather.py` | required for get_weather; without it the intent says so |
@@ -1154,6 +1166,12 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-16 | ANY wake-word trigger wakes the screen, on `listening` only | USER. Having to touch a dark panel you have already spoken to feels broken. `listening` and not the later stages: the same utterance's `speaking` event would undo a "screen off" command it was in the middle of carrying out |
+| 2026-10-16 | idle timeout defaults to 30 minutes, not never | USER. Long enough never to blank mid-glance; any voice trigger wakes it, so the cost of it being wrong is one word |
+| 2026-10-16 | real screen-off via a HOST agent, not the container | USER: the UI veil left the backlight on and the panel was still bright in the dark. A container cannot reach the backlight; the agent runs in the kiosk session, where the compositor tools and the sysfs file are reachable, and holds no API key because it polls through nginx |
+| 2026-10-16 | screen power is backend STATE, not just the existing WS command | a command is a thing that happened once -- an agent that starts late or misses it cannot ask what is true now. The command still fires, because it is what blanks the UI instantly while the agent polls |
+| 2026-10-16 | the agent auto-detects the display rather than being configured | the method differs per panel (DSI vs HDMI) and per session (labwc vs i3), and a wrong hard-coded path fails silently at night |
+| 2026-10-16 | idle auto-sleep lives in the BROWSER | it is the only party that knows about touches. The backend keeps the timeout value (a panel policy); the dashboard enforces it |
 | 2026-10-16 | /etc/localtime mounted read-only into backend and voice | a container runs on UTC whatever the host is set to, and the backend computes the ALARM SCHEDULE from its local clock -- a 7:30 alarm would have fired at 7:30 UTC. Mount rather than a TZ env var: glibc reads /etc/localtime directly, so it needs no tzdata in the image and follows the host |
 | 2026-10-16 | accent is RED (`--accent`), status `--down` stays red too | USER preference. Tolerable because nothing reads "red" alone as "broken": a down service is always labelled, carries a status dot, and pulses -- the accent never animates |
 | 2026-10-16 | voice pill's `ready` pinned to a new `--info` token, not `--accent` | `speaking` is red and means "do not talk over this". With a red accent, `ready` would have been the same colour, so the old blue survives as its own token |
@@ -1254,6 +1272,23 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-16 macOS, real backend + agent: a fresh install reports
+     screen_timeout_min=30; voice sleep_screen drove the stand-in backlight
+     to 4; a following state=listening woke it to 0 with source="wake word";
+     and a full utterance (listening -> thinking -> sleep_screen -> speaking
+     -> ready) left it OFF, proving the later stages do not undo the command
+     they are carrying out. Fastpath: 26 phrasings including 15 screen ones,
+     zero regressions."
+  - "2026-10-16 macOS, real backend + the real agent script + browser: the
+     whole screen-off loop. Top-bar button -> POST /screen source=button ->
+     agent wrote 4 to a stand-in bl_power; tap on the veil -> source=touch
+     -> wrote 0; voice sleep_screen/wake_screen did the same through
+     /voice/intent. Detection picked sysfs; with no key the agent logged
+     the 401 ONCE and deliberately did not touch the screen.
+     screen_timeout_min round-trips and rejects junk (400), and sound
+     validation still rejects a missing file.
+     NOT VERIFIED: a real backlight, the wlr-randr/xset/vcgencmd paths (no
+     Pi here), and the udev rule."
   - "2026-10-16 macOS, REAL backend (uvicorn) + browser at 1024x600:
      timers fire and ring and clear on stop-all; a 6s timer showed the ringing
      banner and the browser fetched the sound (206 Partial Content, i.e. the

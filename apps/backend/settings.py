@@ -47,7 +47,21 @@ DEFAULTS = {
     # ringing banner without audio rather than guessing at a file.
     "timer_sound": "",
     "alarm_sound": "",
+    # Minutes of no touch before the dashboard blanks the screen. "0" means
+    # never. Stored as a string like everything else here; the dashboard
+    # parses it, and a junk value reads as 0, which is the safe direction --
+    # a panel that fails to blank beats one that blanks unpredictably.
+    #
+    # 30 by default (USER DECISION 2026-10-16): long enough that it never
+    # blanks mid-glance, short enough that a panel left alone overnight is not
+    # lighting the room. Any voice trigger wakes it again, so the cost of it
+    # being wrong is one word.
+    "screen_timeout_min": "30",
 }
+
+# Sound settings are validated against the media directory; this one is not a
+# sound and must not be.
+_SOUND_KEYS = ("timer_sound", "alarm_sound")
 
 
 def _path() -> str:
@@ -111,11 +125,18 @@ def update(values: dict) -> dict:
         if key not in values:
             continue
         value = str(values[key] or "")
-        if value and value not in available:
-            raise ValueError(
-                f"No such sound {value!r} in {media_dir()}. Available: "
-                + (", ".join(sorted(available)) or "(none)")
-            )
+
+        if key in _SOUND_KEYS:
+            if value and value not in available:
+                raise ValueError(
+                    f"No such sound {value!r} in {media_dir()}. Available: "
+                    + (", ".join(sorted(available)) or "(none)")
+                )
+        elif key == "screen_timeout_min":
+            if value and not value.isdigit():
+                raise ValueError("screen_timeout_min must be a whole number of minutes")
+            value = value or "0"
+
         settings[key] = value
 
     _save()
