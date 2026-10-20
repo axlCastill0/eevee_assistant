@@ -71,9 +71,21 @@ class VoiceAssistant:
         self.classifier = None
         if config.SLM_ENABLED:
             from .slm import IntentClassifier
-            self.classifier = IntentClassifier(self.catalog)
-            log.info("Warming up SLM...")
-            self.classifier.warmup()
+            try:
+                self.classifier = IntentClassifier(self.catalog)
+                log.info("Warming up SLM...")
+                self.classifier.warmup()
+            except Exception:
+                # Loading the model can fail for reasons that have nothing to
+                # do with the rest of the pipeline: a truncated GGUF, a bad
+                # context size, an OOM. None of them are a reason to leave the
+                # house without a voice assistant -- the fast path covers the
+                # common phrasings on its own.
+                self.classifier = None
+                log.exception(
+                    "Could not start the intent classifier; continuing with "
+                    "the fast path only. Unmatched phrasings will be 'unknown'."
+                )
         else:
             log.warning("SLM disabled; unmatched utterances will be 'unknown'")
 

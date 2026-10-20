@@ -178,6 +178,7 @@ def describe(seconds: int) -> str:
 def add(duration_s: int, label: Optional[str] = None) -> Timer:
     """Start a timer. Duration is clamped to the sane band."""
     duration_s = max(MIN_DURATION_S, min(MAX_DURATION_S, int(duration_s)))
+    _evict_if_crowded()
 
     timer = Timer(
         id=secrets.token_hex(3),
@@ -188,6 +189,31 @@ def add(duration_s: int, label: Optional[str] = None) -> Timer:
     _timers[timer.id] = timer
     log.info("Timer %s started: %s", timer.id, timer.label)
     return timer
+
+
+# A ringing timer is never expired on a schedule -- an alarm nobody
+# acknowledged is not an alarm that has been dealt with -- so on a panel that
+# runs for months the registry is the one structure here that can grow without
+# anything removing entries. This bounds it. 64 is far past "someone is using
+# timers" and well short of anything that matters for memory.
+MAX_TIMERS = 64
+
+
+def _evict_if_crowded() -> None:
+    """Make room by dropping the OLDEST acknowledged-but-ignored timers.
+
+    Ringing ones go first, oldest first, because a timer that fired hours ago
+    and was never stopped is the one nobody is waiting on. Running timers are
+    only touched if there is nothing else left, which would mean 64 live
+    countdowns and a user with other problems.
+    """
+    while len(_timers) >= MAX_TIMERS:
+        rung = sorted((t for t in _timers.values() if t.ringing),
+                      key=lambda t: t.fired_at or 0)
+        victim = rung[0] if rung else min(_timers.values(), key=lambda t: t.created_at)
+        log.warning("Timer registry full (%d); dropping %s (%s)",
+                    len(_timers), victim.id, victim.label)
+        _timers.pop(victim.id, None)
 
 
 def cancel(timer_id: str) -> bool:

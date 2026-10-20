@@ -7,7 +7,7 @@ UPDATE THIS FILE IN THE SAME COMMIT AS ANY CHANGE IT DESCRIBES. See `## update_p
 meta:
   project: eevee_assistant
   root: /Users/tako/root/eevee_assistant
-  last_updated: 2026-10-16
+  last_updated: 2026-10-19
   git_branch_main: main
   target_host: Raspberry Pi 5 (8GB recommended), Raspberry Pi OS Lite 64-bit
                CONFIRMED 2026-10-07: the Pi runs Trixie (Debian 13), aarch64.
@@ -648,6 +648,28 @@ sound_cache: /clock/sounds sends Cache-Control: max-age=3600, so a repeat
 ## container gotchas
 
 ```yaml
+slm_context_window:
+  The system prompt grows with the intent catalogue (one line per intent) and
+  llama.cpp does NOT degrade when it stops fitting -- it raises and the
+  pipeline exits at startup. 2026-10-19: 22 intents = 1048 tokens into a 1024
+  window, and the voice container restart-looped unnoticed for days.
+  Now: config default 2048, slm.py estimates the prompt before loading and
+  re-checks exactly after, growing n_ctx in 256-token steps. An explicit
+  VOICE_SLM_N_CTX is a FLOOR, never shrunk. Measured 2026-10-19: 22 intents
+  estimate 1257 tokens (the estimator errs high on purpose), so 2048 holds
+  about 30 more intents before it grows itself.
+
+screen_backlight_values:
+  bl_power is 0 = on, 1 = off. NOT 4. Some drivers accept 4
+  (FB_BLANK_POWERDOWN) and others ignore it silently, which presents as a
+  panel that is "off" and still glowing. On Pi OS Lite /sys/class/backlight
+  can be EMPTY until dtoverlay=rpi-backlight is set, which makes the agent
+  fall through to a method that may not darken the panel at all.
+  vcgencmd display_power is DEAD on a Pi 5 (firmware refuses it under
+  vc4-kms-v3d) -- it is a last-resort fallback for older boards only.
+  Only the sysfs method physically darkens a panel; the compositor methods
+  cut the video signal and leave the decision to the display.
+
 utc_by_default:
   A container's local time is UTC no matter what the host says. Found on the
   Pi 2026-10-16: the dashboard clock (drawn by the BROWSER, so it follows the
@@ -1341,6 +1363,10 @@ xterm_is_required:
 
 | date | decision | why |
 |---|---|---|
+| 2026-10-19 | SLM sizes its own context window from the prompt | the 22nd intent pushed the system prompt to 1048 tokens into a 1024 window and llama.cpp refused to run, crash-looping the voice container for DAYS. Adding an intent must never be able to do that again |
+| 2026-10-19 | a failed classifier degrades to fast-path-only, never exits | on an always-on panel a crash loop is invisible (the pill just reads offline) and writes logs as fast as it can. A degraded assistant beats a dead one |
+| 2026-10-19 | container logs capped at 10MB x 3 | the json-file driver is UNLIMITED by default, so the crash loop above was also filling the SD card |
+| 2026-10-19 | screen agent writes bl_power=1, not 4 | 0/1 is what the Pi's backlight driver documents; 4 (FB_BLANK_POWERDOWN) works on some drivers and is SILENTLY IGNORED by others, which looks exactly like "off but still lit" |
 | 2026-10-16 | ANY wake-word trigger wakes the screen, on `listening` only | USER. Having to touch a dark panel you have already spoken to feels broken. `listening` and not the later stages: the same utterance's `speaking` event would undo a "screen off" command it was in the middle of carrying out |
 | 2026-10-16 | idle timeout defaults to 30 minutes, not never | USER. Long enough never to blank mid-glance; any voice trigger wakes it, so the cost of it being wrong is one word |
 | 2026-10-16 | real screen-off via a HOST agent, not the container | USER: the UI veil left the backlight on and the panel was still bright in the dark. A container cannot reach the backlight; the agent runs in the kiosk session, where the compositor tools and the sysfs file are reachable, and holds no API key because it polls through nginx |
@@ -1515,6 +1541,16 @@ passed:
      wheel does not move a scroll-snap wheel; the read-back was driven
      programmatically instead), the aura/sheen animations' real cost on a Pi
      GPU, and audible playback."
+  - "2026-10-19 macOS: SLM context sizing against the REAL 22-intent
+     prompt -- 4022 chars, estimated 1257 tokens (vs the 1048 llama.cpp
+     actually counted on the Pi, so the estimate errs high as designed),
+     _fit_context keeps 2048 today and grows to 2560/3584 at +30/+60
+     intents, and an explicit larger n_ctx is never shrunk.
+     Agent --test verified end to end on a stand-in bl_power: writes 1,
+     waits, writes 0. That test ALSO caught a real bug -- the --test block
+     sat above the apply() definition, so on macOS it silently ran
+     /usr/bin/apply instead; moved below the function.
+     NOT VERIFIED: any of it on the Pi, and no real panel was darkened."
   - "2026-10-16 macOS, real backend + agent: a fresh install reports
      screen_timeout_min=30; voice sleep_screen drove the stand-in backlight
      to 4; a following state=listening woke it to 0 with source="wake word";

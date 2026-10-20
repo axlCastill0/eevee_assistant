@@ -25,6 +25,22 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("slm")
 
+# Room left over the prompt for the user's sentence and the model's answer.
+# The answer is capped by SLM_MAX_TOKENS and a transcript is short, so this is
+# slack rather than a budget.
+_CONTEXT_HEADROOM = 256
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token count, used before a tokenizer exists.
+
+    ~3.2 characters per token for English prose with punctuation, which errs
+    high for this prompt (lots of short JSON fragments). Erring high is the
+    safe direction: the cost is a slightly larger KV cache, and the cost of
+    erring low is the crash this exists to prevent.
+    """
+    return int(len(text) / 3.2) + 1
+
 
 _PROMPT_TEMPLATE = """You are a strict intent classifier for a home server voice assistant.
 
@@ -135,19 +151,68 @@ class IntentClassifier:
             intent_block=catalog.prompt_block()
         )
 
+        # The system prompt grows every time an intent is added, and llama.cpp
+        # does not degrade when it no longer fits -- it raises and takes the
+        # whole pipeline down at startup. That happened on the Pi on
+        # 2026-10-19 with the 22nd intent (1048 tokens into a 1024 window),
+        # and the container restart-looped until someone looked at the logs.
+        #
+        # So size the window from the prompt rather than hoping. The estimate
+        # is deliberately generous; the exact count is checked below, once
+        # there is a tokenizer to ask.
+        n_ctx = self._fit_context(config.SLM_N_CTX, _estimate_tokens(self.system_prompt))
+
         t0 = time.monotonic()
         self.llm = Llama(
             model_path=config.SLM_PATH,
-            n_ctx=config.SLM_N_CTX,
+            n_ctx=n_ctx,
             n_threads=config.SLM_THREADS,
             # The prompt is fixed and long relative to the user turn, so the
             # whole thing is worth keeping resident.
             use_mlock=False,   # mlock can fail in a container without IPC_LOCK
             verbose=False,
         )
+
+        # Now measure it properly. A reload costs about a second and only
+        # happens when the estimate was wrong in the dangerous direction.
+        exact = len(self.llm.tokenize(self.system_prompt.encode(), add_bos=True))
+        needed = self._fit_context(n_ctx, exact)
+        if needed > n_ctx:
+            log.warning("System prompt is %d tokens; reloading with n_ctx=%d",
+                        exact, needed)
+            self.llm = Llama(
+                model_path=config.SLM_PATH,
+                n_ctx=needed,
+                n_threads=config.SLM_THREADS,
+                use_mlock=False,
+                verbose=False,
+            )
+            n_ctx = needed
+
+        self.n_ctx = n_ctx
+        self.prompt_tokens = exact
+        self.ok = True
+
         self.grammar = LlamaGrammar.from_string(build_grammar_text(catalog.names))
-        log.info("SLM loaded in %.1fs (%d threads, %s)",
-                 time.monotonic() - t0, config.SLM_THREADS, config.SLM_PATH)
+        log.info("SLM loaded in %.1fs (%d threads, n_ctx=%d, prompt=%d tokens, %s)",
+                 time.monotonic() - t0, config.SLM_THREADS, n_ctx, exact,
+                 config.SLM_PATH)
+
+    @staticmethod
+    def _fit_context(configured: int, prompt_tokens: int) -> int:
+        """A context window the prompt actually fits in.
+
+        Never shrinks below what was configured -- an explicit
+        VOICE_SLM_N_CTX is a floor, not a target -- and leaves room for the
+        user's sentence and the answer on top of the prompt.
+        """
+        needed = prompt_tokens + config.SLM_MAX_TOKENS + _CONTEXT_HEADROOM
+        if needed <= configured:
+            return configured
+
+        # Round up to a multiple of 256: llama.cpp allocates the KV cache from
+        # this, and odd sizes buy nothing.
+        return ((needed + 255) // 256) * 256
 
     def warmup(self) -> None:
         """One call with the real prompt shape, so the first user utterance is
@@ -155,9 +220,25 @@ class IntentClassifier:
 
         On a Pi 5 with the 1.5B this takes a while — run it before announcing
         readiness, not lazily on the first command.
+
+        NEVER RAISES. A classifier that cannot warm up is a degraded
+        assistant; a pipeline that exits is a dead one, and on an always-on
+        panel it restart-loops instead of telling anyone. The fast path still
+        answers every common phrasing, so `self.ok = False` costs the long
+        tail and nothing else.
         """
         t0 = time.monotonic()
-        self._complete("warmup")
+        try:
+            self._complete("warmup")
+        except Exception:
+            self.ok = False
+            log.exception(
+                "SLM warmup failed; continuing WITHOUT the classifier. "
+                "Fast-path phrasings still work, anything else becomes "
+                "'unknown'. n_ctx=%d, prompt=%d tokens.",
+                self.n_ctx, self.prompt_tokens,
+            )
+            return
         log.info("SLM warmup took %.1fs", time.monotonic() - t0)
 
     def _complete(self, text: str) -> str:
@@ -174,6 +255,11 @@ class IntentClassifier:
 
     def classify(self, text: str) -> tuple[str, Optional[str]]:
         """Classify `text` into (intent, item)."""
+        if not self.ok:
+            # Warmup already said why, loudly. Repeating it per utterance
+            # would bury everything else in the log.
+            return "unknown", None
+
         t0 = time.monotonic()
         try:
             raw = self._complete(text)

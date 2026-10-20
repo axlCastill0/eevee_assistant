@@ -29,13 +29,23 @@ log() { printf '%s screen-agent: %s\n' "$(date '+%H:%M:%S')" "$*"; }
 # --- pick a method, once, at startup ---------------------------------------
 # In order of how directly each one controls the actual backlight:
 #
-#   1. sysfs bl_power  — the real backlight switch on a DSI panel (the
-#      official 7" touchscreen and most DSI clones). 0 = on, 4 = off.
-#   2. wlr-randr       — Wayland (labwc). Powers the output down; on an HDMI
-#      monitor this is what makes it sleep.
-#   3. xset dpms       — the X11 (i3) equivalent.
-#   4. vcgencmd        — Pi-specific HDMI power. Last because it is the
-#      coarsest and needs /dev/vcio.
+#   1. sysfs bl_power  — the REAL backlight switch, and the only method here
+#      that physically darkens a DSI panel (the official touchscreen and its
+#      clones). 0 = on, 1 = off, per the Pi's own backlight driver.
+#   2. wlopm           — Wayland output power management (labwc, wayfire).
+#      Proper DPMS off; preferred over wlr-randr, which disables the output
+#      rather than powering it down.
+#   3. wlr-randr       — the fallback for Wayland sessions without wlopm.
+#   4. xset dpms       — the X11 (i3) equivalent.
+#   5. vcgencmd        — LEGACY, and DEAD ON A PI 5: the firmware refuses
+#      `display_power` whenever vc4-kms-v3d is in use, which is always on a
+#      Pi 5. Kept only for older boards.
+#
+# ON AN HDMI PANEL, methods 2-4 cut the video signal and the monitor decides
+# what to do about it. A real monitor goes to standby and goes dark; a cheap
+# driver board may keep its LED backlight lit regardless, and no software on
+# the Pi can change that -- cutting the panel's power is the only fix. A DSI
+# panel has no such ambiguity, which is why the sysfs method is first.
 #
 # Detection is deliberate rather than "try everything": a panel that supports
 # two of these would otherwise get contradictory instructions.
@@ -56,6 +66,10 @@ elif [ -n "${BACKLIGHT}" ]; then
     log "         Add the udev rule from docs/README_PI.md, or run: sudo usermod -aG video $(id -un)"
 fi
 
+if [ -z "${METHOD}" ] && [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wlopm >/dev/null; then
+    METHOD="wlopm"
+fi
+
 if [ -z "${METHOD}" ] && [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wlr-randr >/dev/null; then
     METHOD="wlr-randr"
     OUTPUT="$(wlr-randr --json 2>/dev/null | sed -n 's/.*"name": "\([^"]*\)".*/\1/p' | head -1)"
@@ -68,6 +82,14 @@ fi
 
 if [ -z "${METHOD}" ] && command -v vcgencmd >/dev/null; then
     METHOD="vcgencmd"
+    if grep -q "Raspberry Pi 5" /proc/device-tree/model 2>/dev/null; then
+        log "WARNING: falling back to vcgencmd on a Pi 5, where the firmware"
+        log "         refuses display_power under vc4-kms-v3d. This will NOT"
+        log "         switch your screen. Install wlopm (Wayland) or"
+        log "         x11-xserver-utils (X11), or check that"
+        log "         /sys/class/backlight is populated -- on Pi OS Lite that"
+        log "         needs dtoverlay=rpi-backlight in /boot/firmware/config.txt."
+    fi
 fi
 
 if [ -z "${METHOD}" ]; then
@@ -76,15 +98,20 @@ if [ -z "${METHOD}" ]; then
     exit 1
 fi
 
-log "using ${METHOD}${BACKLIGHT:+ (${BACKLIGHT})}${OUTPUT:+ (${OUTPUT})}, polling ${URL} every ${INTERVAL}s"
 
 apply() {
     local want="$1"      # on | off
     case "${METHOD}" in
         sysfs)
-            # 4 is FB_BLANK_POWERDOWN. Writing 1-3 dims on some panels and
-            # does nothing on others; 4 is the one that is actually off.
-            [ "${want}" = "on" ] && echo 0 > "${BACKLIGHT}" || echo 4 > "${BACKLIGHT}"
+            # 1 = off, 0 = on. The Pi's backlight driver documents these two
+            # and nothing else; 4 (FB_BLANK_POWERDOWN) happens to work on
+            # some drivers and is silently ignored by others, which is a very
+            # good way to end up with a panel that is "off" but still lit.
+            [ "${want}" = "on" ] && echo 0 > "${BACKLIGHT}" || echo 1 > "${BACKLIGHT}"
+            ;;
+        wlopm)
+            [ "${want}" = "on" ] && wlopm --on '"'"'*'"'"' >/dev/null 2>&1 \
+                                 || wlopm --off '"'"'*'"'"' >/dev/null 2>&1
             ;;
         wlr-randr)
             wlr-randr --output "${OUTPUT}" --"${want}" >/dev/null 2>&1
@@ -106,6 +133,19 @@ apply() {
             ;;
     esac
 }
+
+if [ "${1:-}" = "--test" ]; then
+    log "using ${METHOD}${BACKLIGHT:+ (${BACKLIGHT})}${OUTPUT:+ (${OUTPUT})}"
+    log "turning the screen OFF for 5 seconds -- watch the panel"
+    apply off
+    sleep 5
+    apply on
+    log "back on. If the panel stayed lit, this method does not control its"
+    log "backlight; see 'The screen agent' in docs/README_PI.md."
+    exit 0
+fi
+
+log "using ${METHOD}${BACKLIGHT:+ (${BACKLIGHT})}${OUTPUT:+ (${OUTPUT})}, polling ${URL} every ${INTERVAL}s"
 
 # Start from a known state, so the panel and the backend agree before the
 # first change rather than after it.

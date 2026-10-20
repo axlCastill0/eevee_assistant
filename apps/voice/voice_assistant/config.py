@@ -172,7 +172,15 @@ WHISPER_LOCAL_ONLY = not _bool("VOICE_WHISPER_ALLOW_DOWNLOAD", False)
 # Swap to models/qwen2.5-0.5b-instruct-q4_k_m.gguf via VOICE_SLM_MODEL if
 # latency ever matters more than accuracy.
 SLM_PATH = _str("VOICE_SLM_MODEL", f"{MODEL_DIR}/qwen2.5-1.5b-instruct-q5_k_m.gguf")
-SLM_N_CTX = _int("VOICE_SLM_N_CTX", 1024)
+# Context window. This has to hold the ENTIRE system prompt, which grows with
+# the intent catalogue -- every intent adds a line to it. 1024 was the default
+# until 2026-10-19, when the 22nd intent pushed the prompt to 1048 tokens and
+# llama.cpp refused to run at all:
+#   ValueError: Requested tokens (1048) exceed context window of 1024
+# slm.py now measures the prompt and grows this on its own if it is still too
+# small, so adding intents cannot break the pipeline again; this is the
+# starting point, with room for a good few more.
+SLM_N_CTX = _int("VOICE_SLM_N_CTX", 2048)
 SLM_MAX_TOKENS = _int("VOICE_SLM_MAX_TOKENS", 40)
 
 TTS_MODEL_PATH = _str("VOICE_TTS_MODEL", f"{MODEL_DIR}/en_US-amy-medium.onnx")

@@ -7,6 +7,20 @@ services:
     restart: always
     network_mode: host
 
+    # Logs are capped. This box is meant to run for months unattended, and the
+    # json-file driver defaults to UNLIMITED -- a restart-looping container
+    # (which is exactly what a crash at startup produces) can fill the SD card
+    # with its own traceback, taking the whole system down with it. Seen the
+    # near-miss on 2026-10-19: the voice container looped for days.
+    #
+    # 10 MB x 3 is a few days of normal output and bounds the worst case at
+    # 30 MB per service.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     volumes:
       # HOST TIMEZONE. Without this the container runs on UTC no matter what
       # the Pi is set to, and everything the backend computes from the local
@@ -55,6 +69,20 @@ services:
     # indefinitely. This way `docker compose stop voice` sticks while debugging.
     restart: unless-stopped
 
+    # Logs are capped. This box is meant to run for months unattended, and the
+    # json-file driver defaults to UNLIMITED -- a restart-looping container
+    # (which is exactly what a crash at startup produces) can fill the SD card
+    # with its own traceback, taking the whole system down with it. Seen the
+    # near-miss on 2026-10-19: the voice container looped for days.
+    #
+    # 10 MB x 3 is a few days of normal output and bounds the worst case at
+    # 30 MB per service.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     # Host networking so the pipeline reaches the API on 127.0.0.1:8000, and
     # because it is the project-wide convention on this Pi.
     network_mode: host
@@ -96,6 +124,20 @@ services:
     restart: always
 
     network_mode: host
+
+    # Logs are capped. This box is meant to run for months unattended, and the
+    # json-file driver defaults to UNLIMITED -- a restart-looping container
+    # (which is exactly what a crash at startup produces) can fill the SD card
+    # with its own traceback, taking the whole system down with it. Seen the
+    # near-miss on 2026-10-19: the voice container looped for days.
+    #
+    # 10 MB x 3 is a few days of normal output and bounds the worst case at
+    # 30 MB per service.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
     environment:
       # nginx attaches this to every proxied request. It is never served to

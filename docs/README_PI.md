@@ -826,14 +826,48 @@ It picks a method at startup, in this order:
 
 | Method | For | Needs |
 |---|---|---|
-| `/sys/class/backlight/*/bl_power` | DSI panels, incl. the official 7" | write access, see below |
-| `wlr-randr --output … --off` | Wayland / labwc | `WAYLAND_DISPLAY` in its env |
-| `xset dpms force off` | X11 / i3 | `DISPLAY` in its env |
-| `vcgencmd display_power 0` | HDMI, Pi-specific | `/dev/vcio` (the `video` group) |
+| `/sys/class/backlight/*/bl_power` | DSI panels, incl. the official touchscreen | write access, see below |
+| `wlopm --off '*'` | Wayland (labwc, wayfire) | `wlopm` installed, `WAYLAND_DISPLAY` set |
+| `wlr-randr --output … --off` | Wayland without `wlopm` | `WAYLAND_DISPLAY` set |
+| `xset dpms force off` | X11 / i3 | `DISPLAY` set |
+| `vcgencmd display_power 0` | **legacy, not a Pi 5** | see below |
+
+**Only the first one physically darkens a panel.** The others cut the video
+signal and leave it to the display: a real monitor drops to standby and goes
+dark, but a cheap HDMI driver board may keep its LED backlight lit no matter
+what the Pi does, and nothing on the Pi can change that — cutting the panel's
+power is the only remedy. A DSI panel has no such ambiguity, which is why
+`bl_power` is tried first.
+
+**`vcgencmd display_power` does not work on a Pi 5.** The firmware refuses it
+whenever `vc4-kms-v3d` is in use, which is always on a Pi 5, so it is kept
+only for older boards. The agent warns if it ever falls back to it there.
+
+**On Pi OS Lite, `/sys/class/backlight/` can be empty**, which is what sends
+the agent down to a weaker method. Populate it:
+
+```bash
+ls /sys/class/backlight/            # empty?
+echo 'dtoverlay=rpi-backlight' | sudo tee -a /boot/firmware/config.txt
+sudo reboot
+```
+
+The directory name varies (`rpi_backlight`, `4-0045`, `10-0045` — it depends
+on which DSI port the panel is on). The agent globs, so any of them works.
+
+**Check which method actually darkens your screen:**
+
+```bash
+~/eevee_assistant/scripts/screen-agent.sh --test
+```
+
+It prints the method it picked, blanks the screen for five seconds, and puts
+it back. Watch the panel: if it stays lit, that method does not control this
+display's backlight and the list above says what to try next.
 
 **Backlight permissions.** The sysfs file is root-owned, so give your user
 write access once with a udev rule — otherwise the agent says so at startup
-and falls through to a coarser method:
+and falls through to a method that may not darken the panel at all:
 
 ```bash
 sudo tee /etc/udev/rules.d/90-backlight.rules >/dev/null <<'EOF'
@@ -849,7 +883,7 @@ sudo reboot
 next to the kiosk launcher — in the labwc autostart:
 
 ```bash
-echo '$HOME/eevee_assistant/scripts/screen-agent.sh >> /tmp/screen-agent.log 2>&1 &' \
+echo '$HOME/eevee_assistant/scripts/screen-agent.sh 2>&1 | logger -t screen-agent &' \
   >> ~/.config/labwc/autostart
 ```
 
@@ -864,6 +898,11 @@ exec --no-startup-id $HOME/eevee_assistant/scripts/screen-agent.sh
 ```bash
 ~/eevee_assistant/scripts/screen-agent.sh      # run in the foreground once
 ```
+
+Piping it through `logger` puts its output in the journal, which is already
+size-capped — a plain `>> /tmp/screen-agent.log` on a box that runs for months
+is a file nothing ever truncates. Read it with
+`journalctl -t screen-agent -f`.
 
 It prints the method it chose, then a line per change. A `401` means it is
 pointed at the backend instead of nginx — use `http://127.0.0.1:8080/api/screen`
@@ -1287,6 +1326,50 @@ docker compose up -d --force-recreate backend voice
 
 Fix the host first: the mount propagates whatever the host has, so pointing it
 at a UTC host just gives you UTC in both places.
+
+### Running for months unattended
+
+This box is meant to stay on, so anything that only grows is a slow failure.
+What is already bounded, and what is on you:
+
+**Capped in the repo.** Each container's logs are limited to 10 MB x 3 files
+(`logging:` in `docker-compose.yml`) — the json-file driver is *unlimited* by
+default, and a container that crash-loops will happily write its traceback
+until the SD card is full. The screen agent logs to the journal rather than a
+file, and nginx has `access_log off`.
+
+**Cap the journal**, which collects everything else on the host:
+
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nSystemMaxUse=200M\nSystemMaxFileSize=50M\n' \
+  | sudo tee /etc/systemd/journald.conf.d/size.conf
+sudo systemctl restart systemd-journald
+journalctl --disk-usage
+```
+
+**Reclaim Docker space after rebuilds.** Images are the big consumer and old
+layers are kept until told otherwise:
+
+```bash
+docker image prune -f           # safe: untagged layers only
+docker system df                # what is actually using the space
+```
+
+**Check occasionally** — these three answer "is anything creeping":
+
+```bash
+df -h /                                   # disk
+free -h                                   # memory
+docker compose ps                         # anything restarting?
+docker compose logs --tail 50 voice       # anything looping?
+```
+
+A container stuck in a restart loop is the failure mode worth catching early:
+it is invisible from the dashboard (the voice pill just reads offline) and it
+is the one thing that writes logs as fast as it can. The pipeline no longer
+exits when the classifier fails, which removed the known cause, but `ps` will
+show a rising restart count if a new one appears.
 
 ### Build runs out of memory or disk
 
