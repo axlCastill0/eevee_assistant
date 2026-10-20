@@ -6,7 +6,7 @@
    changing it here (the compact layout below does) needs no TS change.
    --------------------------------------------------------------------------- */
 .drum {
-  --drum-item: 52px;
+  --drum-item: 62px;
   --drum-rows: 3;
   /* What the top and bottom fades blend into. Overridden by whichever
      surface the wheel is sitting on, so the fade never shows a seam. */
@@ -17,7 +17,7 @@
      this wheel is placed on. */
   isolation: isolate;
   height: calc(var(--drum-item) * var(--drum-rows));
-  min-width: 78px;
+  min-width: 92px;
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -97,7 +97,7 @@
 
 @media (max-height: 620px) {
   .drum {
-    --drum-item: 42px;
+    --drum-item: 50px;
   }
 
   .drum__item {

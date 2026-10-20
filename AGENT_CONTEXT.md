@@ -275,6 +275,11 @@ resolution: UNKNOWN - user has not measured the panel yet
   every type size is clamp() between a 1024x600 floor and 1920x1200 ceiling
   glance/app grids are auto-fill + minmax (auto-fit stretched a lone card)
   the systems log drops columns at 1100px and 860px, verdict/name/age last
+  SIZE: the whole ramp is ~20% larger since 2026-10-19 (USER: read from across
+    the room), --touch-min 64px, --row-h 80px. Every view has a
+    @media (max-height: 680px) block that takes the room back from PADDING AND
+    CARD HEIGHTS, never from type. Do not shrink the ramp to make something
+    fit; shrink its padding in that block.
   VERIFIED at 1280x720 and 1024x600, both themes, 2026-10-19
 
 PI PERFORMANCE RULES - enforced, do not relax without measuring:

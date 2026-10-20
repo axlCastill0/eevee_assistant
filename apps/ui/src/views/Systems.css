@@ -59,3 +59,11 @@
 .sys__footer-sep {
   color: var(--border-strong);
 }
+
+/* Short panels: same trade as the other views -- the heading shrinks, the
+   rows stay finger-sized. */
+@media (max-height: 680px) {
+  .sys__title {
+    font-size: var(--text-xl);
+  }
+}

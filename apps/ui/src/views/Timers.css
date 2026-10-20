@@ -257,3 +257,33 @@
   border-color: var(--accent);
   background: var(--accent-wash);
 }
+
+/* Short panels. The dial gives up the most, because it is the one control
+   here whose usefulness does not depend on its size -- it is dragged, not
+   read -- while the presets and Start have to stay finger-sized. */
+@media (max-height: 680px) {
+  .timers__set .pane__body {
+    gap: var(--space-2);
+  }
+
+  .timers__set .dial {
+    max-width: 164px;
+  }
+
+  /* The readout has to fit inside the smaller face. */
+  .timers__set .dial__value {
+    font-size: var(--text-lg);
+  }
+
+  .timers__set .dial__unit {
+    font-size: 0.625rem;
+  }
+
+  .timers__preset {
+    min-height: 56px;
+  }
+
+  .timers__start {
+    min-height: var(--touch-min);
+  }
+}

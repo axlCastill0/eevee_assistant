@@ -16,9 +16,11 @@
 }
 
 /* Dot matrix. Static background-image, one paint, no element to composite. */
+/* inset 0, not a bleed: this lives inside the scroll container, and anything
+   that reaches past the content makes the page draggable over empty space. */
 .home__matrix {
   position: absolute;
-  inset: -20%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
   opacity: 0.5;
@@ -70,7 +72,7 @@
 
 .home__glance {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(clamp(190px, 20vw, 250px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(clamp(230px, 23vw, 300px), 1fr));
   gap: var(--space-3);
 }
 
@@ -78,7 +80,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 132px;
+  min-height: 158px;
   text-align: left;
   background: var(--surface-1);
   border: 1px solid var(--frame);
@@ -203,8 +205,8 @@
 }
 
 .glance__art {
-  width: 56px;
-  height: 56px;
+  width: 68px;
+  height: 68px;
   flex: none;
   object-fit: cover;
   border: 1px solid var(--border-strong);
@@ -250,7 +252,7 @@
 
 .home__apps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 16vw, 200px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(clamp(185px, 19vw, 250px), 1fr));
   gap: var(--space-3);
   padding-bottom: var(--space-2);
 }
@@ -261,8 +263,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
-  min-height: 140px;
-  padding: var(--space-3);
+  min-height: 190px;
+  padding: var(--space-4) var(--space-4) var(--space-3);
   text-align: left;
   background: var(--surface-1);
   border: 1px solid var(--frame);
@@ -290,13 +292,18 @@
   color: var(--text-faint);
 }
 
+/* Outline glyphs in the accent, always -- not only when the app is live
+   (USER 2026-10-19). "Something is happening here" is carried by the corner
+   tick instead, which is the same marker the rail uses. The generous margin
+   is deliberate: these are the three largest touch targets on the panel and
+   the icon is what the eye lands on from across the room. */
 .apptile__icon {
-  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
-  margin: auto 0 var(--space-1);
-  color: var(--text-dim);
-}
-
-.apptile.is-live .apptile__icon {
+  font-size: clamp(2.25rem, 3.2vw, 3rem);
+  /* auto on both sides: the icon floats in whatever room is left between the
+     command line above it and the name below, so the breathing space is even
+     at every tile height. */
+  margin: auto 0;
+  padding: var(--space-3) 0;
   color: var(--accent);
   text-shadow: var(--glow-soft);
 }
@@ -332,4 +339,38 @@
   background: var(--accent);
   border-radius: 1px;
   box-shadow: var(--glow-soft);
+}
+
+/* Short panels -- the 1024x600 class this kiosk is most likely to be.
+   The type scale stays where it is, because being readable from across the
+   room is the whole point of it; the room comes out of padding and card
+   heights instead, and the page still fits without scrolling. */
+@media (max-height: 680px) {
+  .home {
+    gap: var(--space-2);
+  }
+
+  .home__head {
+    padding: 0;
+  }
+
+  .home__title {
+    font-size: var(--text-xl);
+  }
+
+  .glance {
+    min-height: 128px;
+  }
+
+  .glance__main {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .apptile {
+    min-height: 150px;
+  }
+
+  .apptile__icon {
+    padding: var(--space-1) 0;
+  }
 }

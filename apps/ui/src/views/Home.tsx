@@ -330,7 +330,7 @@ function appTiles({
     {
       route: 'timers',
       name: 'Timers',
-      icon: 'stopwatch',
+      icon: 'timer',
       status:
         timers.length === 0
           ? 'none running'
@@ -349,7 +349,7 @@ function appTiles({
     {
       route: 'wake',
       name: 'Home',
-      icon: 'display',
+      icon: 'pc',
       // Deliberately NOT a live reading. This tile would otherwise have to
       // poll the backend's TCP probe from the launcher, and a probe that runs
       // whenever the panel is idle on the home screen is a knock on that

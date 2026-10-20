@@ -2,7 +2,7 @@
 
 .rail {
   flex: none;
-  width: clamp(76px, 7vw, 96px);
+  width: clamp(96px, 8.5vw, 124px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -53,8 +53,8 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: 78px;
-  padding: var(--space-2) 2px;
+  min-height: 96px;
+  padding: var(--space-3) 2px;
   color: var(--text-faint);
   transition:
     color var(--dur-fast) var(--ease),
@@ -68,8 +68,8 @@
   left: 0;
   top: 50%;
   width: 3px;
-  height: 46px;
-  margin-top: -23px;
+  height: 58px;
+  margin-top: -29px;
   background: var(--accent);
   box-shadow: var(--glow);
   transform: scaleY(0);
@@ -93,7 +93,7 @@
    marks the window you are in. */
 .rail__key {
   font-family: var(--font-mono);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.5;
   min-width: 1.25em;
@@ -112,7 +112,7 @@
 }
 
 .rail__icon {
-  font-size: clamp(1.25rem, 1.6vw, 1.5rem);
+  font-size: clamp(1.625rem, 2.1vw, 2rem);
 }
 .rail__item.is-active .rail__icon {
   color: var(--accent);
@@ -121,7 +121,7 @@
 
 .rail__label {
   font-family: var(--font-mono);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: var(--track-label);
   text-transform: uppercase;

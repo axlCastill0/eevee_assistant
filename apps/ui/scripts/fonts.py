@@ -65,6 +65,7 @@ SYMBOLS: dict[str, str] = {
     "fa-power_off": "power",
     "cod-screen_full": "screen",
     "fa-desktop": "display",
+    "oct-device_desktop": "pc",
     # machine
     "cod-pulse": "pulse",
     "cod-chip": "cpu",

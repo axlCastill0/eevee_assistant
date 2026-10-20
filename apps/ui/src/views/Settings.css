@@ -194,3 +194,15 @@
     flex: 1;
   }
 }
+
+/* Short panels: the page heading is the cheapest thing to shrink, and this
+   view is a list that scrolls anyway. */
+@media (max-height: 680px) {
+  .settings__title {
+    font-size: var(--text-xl);
+  }
+
+  .settings__row {
+    min-height: calc(var(--touch-min) + 4px);
+  }
+}

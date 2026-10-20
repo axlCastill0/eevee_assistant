@@ -130,13 +130,17 @@
   --font-mono: 'JetBrains Mono', 'Symbols Nerd Font', ui-monospace, monospace;
   --font-icon: 'Symbols Nerd Font', 'JetBrains Mono', monospace;
 
-  --text-xs: clamp(0.6875rem, 0.55vw + 0.5rem, 0.8125rem);
-  --text-sm: clamp(0.8125rem, 0.6vw + 0.6rem, 0.9375rem);
-  --text-base: clamp(0.9375rem, 0.7vw + 0.7rem, 1.0625rem);
-  --text-lg: clamp(1.125rem, 1vw + 0.8rem, 1.375rem);
-  --text-xl: clamp(1.5rem, 1.6vw + 1rem, 2rem);
-  --text-2xl: clamp(2rem, 2.6vw + 1.2rem, 3rem);
-  --text-3xl: clamp(2.75rem, 4.5vw + 1rem, 4.5rem);
+  /* Scaled up ~20% on 2026-10-19 (USER: the panel is read from across the
+     room). The whole ramp moved together rather than a few headings, so the
+     relationships between sizes are the ones the design was drawn with. The
+     floors are what a 1024x600 panel gets; the ceilings are for 1920. */
+  --text-xs: clamp(0.8125rem, 0.6vw + 0.62rem, 0.9375rem);
+  --text-sm: clamp(0.9375rem, 0.7vw + 0.72rem, 1.125rem);
+  --text-base: clamp(1.125rem, 0.85vw + 0.85rem, 1.3125rem);
+  --text-lg: clamp(1.375rem, 1.2vw + 0.95rem, 1.6875rem);
+  --text-xl: clamp(1.875rem, 2vw + 1.2rem, 2.5rem);
+  --text-2xl: clamp(2.5rem, 3.2vw + 1.4rem, 3.75rem);
+  --text-3xl: clamp(3.5rem, 5.4vw + 1.2rem, 5.5rem);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -153,11 +157,12 @@
   --radius-lg: 4px;
   --radius-full: 999px;
 
-  /* Touch minimum. 44px is Apple's number; a wall panel at arm's length wants
-     more, so 56 is the floor and primary controls are larger. */
-  --touch-min: 56px;
+  /* Touch minimum. 44px is Apple's number; this panel is read and tapped from
+     further away than a phone, so 64 is the floor and primary controls are
+     larger again. */
+  --touch-min: 64px;
   /* Height of a row in any of the list views. */
-  --row-h: 68px;
+  --row-h: 80px;
 
   /* Tracking for the small uppercase mono labels that carry most of the
      chrome. Mono at 11px needs the air. */

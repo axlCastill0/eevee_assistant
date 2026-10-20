@@ -8,7 +8,7 @@
 .dial {
   position: relative;
   width: 100%;
-  max-width: 260px;
+  max-width: 300px;
   aspect-ratio: 1;
   margin-inline: auto;
   display: grid;
@@ -177,7 +177,7 @@
 
 @media (max-height: 620px) {
   .dial {
-    max-width: 190px;
+    max-width: 220px;
   }
 
   .dial__value {

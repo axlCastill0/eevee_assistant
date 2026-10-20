@@ -3,8 +3,8 @@
 .srow {
   display: grid;
   grid-template-columns:
-    auto minmax(80px, 0.8fr) minmax(0, 1.7fr)
-    64px 72px auto auto;
+    auto minmax(90px, 0.8fr) minmax(0, 1.7fr)
+    76px 86px auto auto;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
@@ -52,7 +52,7 @@
 }
 
 .srow__spark {
-  height: 22px;
+  height: 26px;
   display: flex;
   align-items: flex-end;
 }
@@ -76,7 +76,7 @@
    The verdict, the name and the age are the row. */
 @media (max-width: 1100px) {
   .srow {
-    grid-template-columns: auto minmax(80px, 1fr) minmax(0, 1.4fr) 68px auto auto;
+    grid-template-columns: auto minmax(90px, 1fr) minmax(0, 1.4fr) 82px auto auto;
   }
   .srow__spark {
     display: none;
@@ -85,7 +85,7 @@
 
 @media (max-width: 860px) {
   .srow {
-    grid-template-columns: auto 1fr 68px auto;
+    grid-template-columns: auto 1fr 82px auto;
   }
   .srow__detail,
   .srow__meter {

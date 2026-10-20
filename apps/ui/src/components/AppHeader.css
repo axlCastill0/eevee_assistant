@@ -54,3 +54,19 @@
 .appheader__action {
   flex: none;
 }
+
+/* Short panels: the header is chrome, so it is the first thing to give up
+   room to the app under it. */
+@media (max-height: 680px) {
+  .appheader {
+    padding-bottom: var(--space-1);
+  }
+
+  .appheader__back {
+    height: calc(var(--touch-min) - 6px);
+  }
+
+  .appheader__title {
+    font-size: var(--text-lg);
+  }
+}

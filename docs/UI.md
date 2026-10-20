@@ -124,9 +124,23 @@ Scaled for touch:
 - Detail sheet dismisses by dragging down, the gesture people actually reach
   for, so the Close button never has to be hunted
 
+### Size
+
+The whole type ramp was scaled up ~20% on 2026-10-19 (USER: the panel is read
+from across the room), along with `--touch-min` (56 → 64px) and `--row-h`
+(68 → 80px). The ramp moved together rather than a few headings, so the
+relationships the design was drawn with still hold.
+
+That does not fit a 600px-high panel on its own, so every view has a
+`@media (max-height: 680px)` block that buys the room back from **padding and
+card heights, never from type**: the status line and app header tighten, page
+headings drop one step, the glance and app cards lose ~30px each, and the
+timer dial shrinks (it is dragged, not read). Verified at 1024x600 — the
+launcher fits with no scroll, Timers keeps its Start button on screen.
+
 ### Resolution
 
-The panel size is not yet known, so nothing is pinned to a breakpoint:
+The panel size is not yet known, so nothing is pinned to a width breakpoint:
 
 - every type size is a `clamp()` between a 1024x600 floor and a 1920x1200 ceiling
 - the tile grid is `auto-fit` + `minmax`, so services reflow by available width
@@ -151,7 +165,7 @@ These are enforced throughout and are the reason the UI looks the way it does:
 5. `prefers-reduced-motion` disables everything — also a one-line escape hatch
    if the Pi turns out slower than expected.
 
-Payload: 283 KB JS (88 KB gzip), 55 KB CSS (10 KB gzip), 95 KB fonts.
+Payload: 283 KB JS (88 KB gzip), 56 KB CSS (10 KB gzip), 95 KB fonts.
 
 ### Fonts
 
@@ -266,6 +280,12 @@ exist, the next alarm only while one is enabled, now playing only while
 something is playing. **Weather is the exception and is always there**: it is
 the one thing worth reading when nothing is happening, and a home screen that
 empties to nothing reads as broken.
+
+App tile icons are outline glyphs in the accent, always — not only when the
+app is live (USER 2026-10-19). "Something is happening here" is carried by the
+red corner tick instead, the same marker the rail uses for the active window,
+and the icon floats on `margin: auto 0` so its breathing space stays even at
+any tile height.
 
 The grid holds **only apps that have no rail entry**. Music, Systems and
 Settings are rail destinations; repeating them as tiles made the home screen

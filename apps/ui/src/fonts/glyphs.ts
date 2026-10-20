@@ -48,6 +48,7 @@ export const GLYPH = {
   partly_day: '\u{E302}',
   partly_night: '\u{E37E}',
   pause: '\u{EAD1}',
+  pc: '\u{F4A9}',
   pl_corner: '\u{E0BA}',
   pl_corner_alt: '\u{E0BC}',
   pl_left: '\u{E0B0}',
