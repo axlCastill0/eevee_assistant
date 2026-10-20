@@ -594,13 +594,17 @@ purpose: hangboard interval timer. Route #/training, launched from Home.
   USER 2026-10-19. apps/ui/src/views/Training.tsx + Training.css.
 
 the session is FIXED and not configurable, because none was asked for:
-  3 sections x 6 rounds x (10s work + 20s rest) = 9:00, ending on a rest.
+  30s lead-in (USER 2026-10-19), then
+  3 sections x 6 rounds x (10s work + 20s rest) = 9:30, ending on a rest.
   sections: "4 finger half crimp", "three fingers", "two fingers"
-  WORK_S / REST_S / REPS / SECTIONS at the top of the file are the only
-  source of truth: the plan, the cues, the pips and the clock all derive.
-  VERIFIED 2026-10-19 by running the schedule through node: 36 phases,
-  18 work / 18 rest, 3 x 180s, 145 cues, every phase start and every
-  3/2/1 mark present and sorted.
+  the lead-in is phase 0, kind 'prep', and belongs to section 0 so the banner
+  announces what you are getting ready FOR. It happens ONCE, never between
+  sections.
+  PREP_S / WORK_S / REST_S / REPS / SECTIONS at the top of the file are the
+  only source of truth: the plan, the cues, the pips and the clock all derive.
+  VERIFIED 2026-10-19 by running the schedule through node (esbuild the
+  constants block, run it): 37 phases, 1 prep / 18 work / 18 rest, 570s,
+  149 cues, every phase start and every 3/2/1 mark present and sorted.
 
 TIMING IS CLIENT-SIDE, unlike timers.py and alarms.py. This is a session you
   stand in front of: it needs cue accuracy in tens of ms and is meaningless
@@ -620,9 +624,19 @@ cues: a sound at every phase start and at 3, 2, 1 seconds remaining, plus one
   play/pause), because a browser opened by hand has no autoplay exemption.
 
 visual: one ring, one number, one word, readable from a hangboard two metres
-  away. --phase carries the colour (accent while working, info while
-  resting) and everything inside reads it. Sonar rings behind, paused with
-  the session. Last 3s: thicker ring, glowing number, one ping per second.
+  away. --phase carries the colour (warn getting ready, accent working, info
+  resting) and everything inside reads it -- dial, aura, sweep, pips, bar.
+  MOTION (USER 2026-10-19, "make it feel smooth"), all transform/opacity:
+    - the ring transitions stroke-dashoffset over exactly one tick (--tick,
+      100ms, linear) so a 10Hz clock reads as continuous sweep
+    - .training__aura breathes (slower at rest, faster in prep and urgent)
+    - .training__sweep is a conic gradient rotating behind the dial
+    - .training__flash is keyed on the phase index: one ring thrown outward
+      per transition
+    - the number is keyed on its own value, so each second rolls in
+    - sonar rings behind everything; all of it pauses with the session
+  NO filter: blur()/drop-shadow near the ring -- it repaints every tick and a
+  filter would re-rasterise it each time. The glow is a radial gradient.
   A section banner pinned to the TOP EDGE replays on every section change
   (keyed on session+section) -- it was floated over the middle first and
   covered the dial.

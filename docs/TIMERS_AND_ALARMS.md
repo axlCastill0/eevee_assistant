@@ -176,9 +176,15 @@ A third app behind the launcher, at `#/training`. A fixed hangboard session:
 
 | | |
 |---|---|
+| Lead-in | 30s to get on the board, once, at the very start |
 | Sections | **4 finger half crimp**, **three fingers**, **two fingers** |
 | Each section | 6 rounds of 10s work and 20s rest |
-| Total | 9:00, ending on the sixth rest |
+| Total | 9:30, ending on the sixth rest |
+
+Each phase has its own colour, which is the fastest way to read the screen
+from a board two metres away: **amber** while you are getting ready, **red**
+while you are pulling, **blue** while you are resting. The dial, its glow, the
+round pips and the session bar all take it.
 
 It makes a sound at every phase start and at 3, 2 and 1 seconds remaining —
 `training_sound` in Settings — plus one when the session finishes. The only
@@ -196,8 +202,8 @@ Two things that are different from Timers and Alarms, both on purpose:
   stepping away.
 
 Nothing about the session is configurable, because nothing was asked to be:
-the shape of it is the point. `WORK_S`, `REST_S`, `REPS` and `SECTIONS` at the
-top of `apps/ui/src/views/Training.tsx` are the only source of truth — change
+the shape of it is the point. `PREP_S`, `WORK_S`, `REST_S`, `REPS` and
+`SECTIONS` at the top of `apps/ui/src/views/Training.tsx` are the only source of truth — change
 one and the plan, the cues, the round pips and the clock all follow.
 
 ---

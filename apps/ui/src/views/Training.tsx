@@ -29,13 +29,16 @@ import { Icon } from '../components/Term'
 import { soundUrl } from '../lib/api'
 import './Training.css'
 
+/** One lead-in, before anything counts (USER 2026-10-19): time to get on the
+ *  board. It happens once per session, never between sections. */
+const PREP_S = 30
 const WORK_S = 10
 const REST_S = 20
 const REPS = 6
 const SECTIONS = ['4 finger half crimp', 'three fingers', 'two fingers']
 
 interface Phase {
-  kind: 'work' | 'rest'
+  kind: 'prep' | 'work' | 'rest'
   section: number
   rep: number
   /** Milliseconds from the start of the session. */
@@ -45,7 +48,11 @@ interface Phase {
 
 function buildPlan(): Phase[] {
   const plan: Phase[] = []
-  let at = 0
+  // The lead-in belongs to the first section, so the banner announces what
+  // you are getting ready FOR rather than announcing nothing.
+  let at = PREP_S * 1000
+  plan.push({ kind: 'prep', section: 0, rep: 0, start: 0, end: at })
+
   for (let section = 0; section < SECTIONS.length; section++) {
     for (let rep = 0; rep < REPS; rep++) {
       plan.push({ kind: 'work', section, rep, start: at, end: at + WORK_S * 1000 })
@@ -228,6 +235,8 @@ export function Training({ sound }: { sound: string }) {
   const seconds = Math.ceil(left / 1000)
   const urgent = status === 'running' && left <= 3000
   const live = status === 'running' || status === 'paused'
+  const prep = phase.kind === 'prep'
+  const KIND_WORD = { prep: 'get ready', work: 'work', rest: 'rest' }
 
   return (
     <main className="training">
@@ -235,10 +244,12 @@ export function Training({ sound }: { sound: string }) {
         title="Fingers training"
         subtitle={
           live
-            ? `${phase.kind === 'work' ? 'work' : 'rest'} · section ${phase.section + 1}/3 · round ${phase.rep + 1}/${REPS}`
+            ? prep
+              ? `get ready · ${SECTIONS[0]}`
+              : `${KIND_WORD[phase.kind]} · section ${phase.section + 1}/3 · round ${phase.rep + 1}/${REPS}`
             : status === 'done'
               ? 'session complete'
-              : `3 sections · ${REPS} × ${WORK_S}s / ${REST_S}s · ${mmss(TOTAL_MS)}`
+              : `${PREP_S}s in · 3 sections · ${REPS} × ${WORK_S}s / ${REST_S}s · ${mmss(TOTAL_MS)}`
         }
       />
 
@@ -344,6 +355,18 @@ export function Training({ sound }: { sound: string }) {
             </div>
 
             <div className="training__dial">
+              {/* The glow. A radial disc that breathes and a conic sweep that
+                  turns, both coloured by the phase, both transform/opacity
+                  only -- no filter anywhere near the ring, which repaints
+                  every tick. */}
+              <span className="training__aura" aria-hidden />
+              <span className="training__sweep" aria-hidden />
+
+              {/* Keyed on the phase, so every change throws one ring
+                  outward. This is the motion that makes a transition felt
+                  rather than noticed. */}
+              <span key={index} className="training__flash" aria-hidden />
+
               <svg className="training__ring" viewBox="0 0 220 220" aria-hidden>
                 <circle className="training__ring-track" cx="110" cy="110" r="96" />
                 <circle
@@ -361,13 +384,13 @@ export function Training({ sound }: { sound: string }) {
               {urgent && <span className="training__ping" aria-hidden />}
 
               <div className="training__readout">
-                <span className="training__kind">
-                  {phase.kind === 'work' ? 'work' : 'rest'}
+                <span className="training__kind">{KIND_WORD[phase.kind]}</span>
+                {/* Keyed on the value, so every tick replays the roll-in
+                    rather than swapping a glyph in place. */}
+                <span key={seconds} className="training__seconds num">
+                  {seconds}
                 </span>
-                <span className="training__seconds num">{seconds}</span>
-                <span className="training__of mono">
-                  of {phase.kind === 'work' ? WORK_S : REST_S}s
-                </span>
+                <span className="training__of mono">of {span / 1000}s</span>
               </div>
             </div>
 
@@ -379,7 +402,13 @@ export function Training({ sound }: { sound: string }) {
                 <span
                   key={rep}
                   className={`training__pip${
-                    rep < phase.rep ? ' is-done' : rep === phase.rep ? ' is-now' : ''
+                    prep
+                      ? ''
+                      : rep < phase.rep
+                        ? ' is-done'
+                        : rep === phase.rep
+                          ? ' is-now'
+                          : ''
                   }`}
                 />
               ))}

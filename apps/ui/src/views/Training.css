@@ -31,7 +31,16 @@
   /* --phase is the hue of whatever is happening; everything inside reads it
      rather than knowing about work and rest itself. */
   --phase: var(--text-dim);
+  /* One tick of the session clock. The ring's transition is tied to it. */
+  --tick: 100ms;
   transition: border-color var(--dur) var(--ease);
+}
+
+/* The lead-in. Amber: neither pulling nor resting, and the one colour on
+   this panel that already means "about to happen". */
+.training__stage[data-kind='prep'] {
+  --phase: var(--warn);
+  border-color: var(--warn);
 }
 
 .training__stage[data-kind='work'] {
@@ -311,11 +320,16 @@
   stroke: var(--phase);
   stroke-width: 6;
   stroke-linecap: round;
-  transition: stroke var(--dur) var(--ease);
+  /* The clock ticks ten times a second; this carries the sweep across the
+     gaps so it reads as continuous motion rather than as a stepping hand.
+     Linear, and exactly one tick long, so it never lags the number. */
+  transition:
+    stroke-dashoffset var(--tick) linear,
+    stroke var(--dur) var(--ease),
+    stroke-width var(--dur) var(--ease);
 }
 
 .training__stage.is-urgent .training__ring-fill {
-  filter: none;
   stroke-width: 9;
 }
 
@@ -342,6 +356,104 @@
   }
 }
 
+/* The breathing core. A soft disc of the phase colour under the number: it
+   is what makes the dial feel lit from inside rather than drawn. */
+.training__aura {
+  position: absolute;
+  width: 86%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--phase) 0%,
+    transparent 62%
+  );
+  opacity: 0.14;
+  will-change: transform, opacity;
+  animation: training-breathe 5.5s var(--ease) infinite;
+}
+
+/* Rest breathes slower than work, which is the whole difference between the
+   two states said without a word. */
+.training__stage[data-kind='rest'] .training__aura {
+  animation-duration: 8s;
+}
+.training__stage[data-kind='prep'] .training__aura {
+  animation-duration: 3.4s;
+}
+.training__stage.is-urgent .training__aura {
+  opacity: 0.24;
+  animation-duration: 1s;
+}
+
+@keyframes training-breathe {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 0.2;
+    transform: scale(1.04);
+  }
+}
+
+/* One slow turn of the phase colour around the dial. Rotation is free once
+   composited; the gradient itself is painted once. */
+.training__sweep {
+  position: absolute;
+  width: 128%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0.16;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 55%,
+    var(--phase) 80%,
+    transparent 100%
+  );
+  will-change: transform;
+  animation: spin 9s linear infinite;
+}
+
+.training__stage[data-kind='rest'] .training__sweep {
+  animation-duration: 16s;
+}
+.training__stage.is-urgent .training__sweep {
+  opacity: 0.26;
+  animation-duration: 3s;
+}
+
+/* Thrown outward once, whenever the phase changes. */
+.training__flash {
+  position: absolute;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid var(--phase);
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: training-flash 900ms var(--ease-out);
+}
+
+@keyframes training-flash {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.72);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+/* Everything above freezes with the session. */
+.training__stage[data-state='paused'] .training__aura,
+.training__stage[data-state='paused'] .training__sweep,
+.training__stage[data-state='paused'] .training__ping {
+  animation-play-state: paused;
+}
+
 .training__readout {
   position: relative;
   display: flex;
@@ -366,7 +478,21 @@
   line-height: 0.95;
   letter-spacing: -0.04em;
   color: var(--text);
+  /* Re-keyed every second in the view, so this replays per tick: the number
+     arrives from below instead of being swapped in place. */
+  animation: training-tick 320ms var(--ease-out);
   transition: color var(--dur-fast) var(--ease);
+}
+
+@keyframes training-tick {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 22%, 0) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 .training__stage.is-urgent .training__seconds {
@@ -420,6 +546,17 @@
   background: var(--phase);
   border-color: var(--phase);
   box-shadow: var(--glow-soft);
+  animation: training-pip 2s var(--ease) infinite;
+}
+
+@keyframes training-pip {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 .training__total {

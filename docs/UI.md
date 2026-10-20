@@ -610,10 +610,14 @@ On a macOS dev host, against the real backend, at 1280x800 and 1024x600:
 Not verified — no hardware: real touch gestures, the Docker image building
 (no daemon on the dev host), Chromium kiosk, and actual framerate on a Pi.
 
-**Fingers training** — a fixed hangboard interval timer: three named
-sections, six rounds each of 10s work and 20s rest, nine minutes in total. One
-ring, one number, one word, readable from two metres; red while working, blue
-while resting; a ping per second through the last three. It is the only timer
+**Fingers training** — a fixed hangboard interval timer: a 30s lead-in, then
+three named sections of six rounds each, 10s work and 20s rest, 9:30 in total.
+One ring, one number, one word, readable from two metres. The phase is a
+colour — amber getting ready, red working, blue resting — and the dial's
+breathing glow, its slow conic sweep, the round pips and the session bar all
+take it. Every phase change throws a ring outward, every second rolls the
+number in from below, and the last three seconds thicken the ring, light the
+number and ping once a second. It is the only timer
 in this UI that runs client-side, and `docs/TIMERS_AND_ALARMS.md` §4b says why.
 
 **Home** — wake-on-LAN. One machine, one button, and a status dot that only
