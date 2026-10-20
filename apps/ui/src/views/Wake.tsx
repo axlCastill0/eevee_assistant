@@ -172,7 +172,11 @@ export function Wake() {
             </div>
             <div>
               <dt>Probe</dt>
-              <dd className="mono">{data.probe_host || 'not set'}</dd>
+              <dd className="mono">
+                {data.probe_host
+                  ? `${data.probe_host}:${(data.probe_ports ?? []).join(',') || '--'}`
+                  : 'not set'}
+              </dd>
             </div>
           </dl>
         )}

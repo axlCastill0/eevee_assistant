@@ -587,6 +587,47 @@ theme: still per-browser localStorage, NOT a server setting. A theme belongs
   because that is where a person looks for it.
 ```
 
+## fingers training
+
+```yaml
+purpose: hangboard interval timer. Route #/training, launched from Home.
+  USER 2026-10-19. apps/ui/src/views/Training.tsx + Training.css.
+
+the session is FIXED and not configurable, because none was asked for:
+  3 sections x 6 rounds x (10s work + 20s rest) = 9:00, ending on a rest.
+  sections: "4 finger half crimp", "three fingers", "two fingers"
+  WORK_S / REST_S / REPS / SECTIONS at the top of the file are the only
+  source of truth: the plan, the cues, the pips and the clock all derive.
+  VERIFIED 2026-10-19 by running the schedule through node: 36 phases,
+  18 work / 18 rest, 3 x 180s, 145 cues, every phase start and every
+  3/2/1 mark present and sorted.
+
+TIMING IS CLIENT-SIDE, unlike timers.py and alarms.py. This is a session you
+  stand in front of: it needs cue accuracy in tens of ms and is meaningless
+  if you walk away, so it lives in the view and dies with it. Leaving the
+  page ENDS the session -- there is no backend state behind it.
+  The schedule is ABSOLUTE (offsets from one performance.now() instant) so a
+  late tick never accumulates drift. Pause banks the segment; resume starts a
+  new one. performance.now() and not Date.now(): NTP steps the Pi's clock.
+
+cues: a sound at every phase start and at 3, 2, 1 seconds remaining, plus one
+  at the end. Sorted offsets + a pointer, so a throttled tab that wakes late
+  fires ONE sound for everything it passed rather than a burst.
+  sound file: settings key `training_sound`, same media dir and same picker
+  as the timer and alarm sounds. SHORT -- it plays four times a phase.
+  A pool of three <audio> elements: two cues can land a few hundred ms apart
+  and one element cannot overlap itself. The Start press primes them (muted
+  play/pause), because a browser opened by hand has no autoplay exemption.
+
+visual: one ring, one number, one word, readable from a hangboard two metres
+  away. --phase carries the colour (accent while working, info while
+  resting) and everything inside reads it. Sonar rings behind, paused with
+  the session. Last 3s: thicker ring, glowing number, one ping per second.
+  A section banner pinned to the TOP EDGE replays on every section change
+  (keyed on session+section) -- it was floated over the middle first and
+  covered the dial.
+```
+
 ## wake on lan ("Home")
 
 ```yaml
@@ -606,11 +647,22 @@ packet: 6x 0xFF then the MAC 16 times, UDP broadcast, sent THREE times.
   retransmits it. No dependency: `wakeonlan` would be a package for a
   constant, same call as urllib in weather.py.
 
-probe: TCP connect, default port 3389 (Windows RDP), 0.6s timeout, cached 5s.
+probe: TCP connect, 0.6s timeout, cached 5s, FIRST ANSWER WINS over a LIST
+  of ports -- default 3389,445,139,22, override with WOL_PROBE_PORT (comma
+  separated, max 4). One port was wrong (fixed 2026-10-19, USER): a PC that
+  was plainly awake read as offline because RDP was not enabled, and 3389 was
+  the only thing tried.
+  A CONNECTION REFUSED COUNTS AS AWAKE. Something has to be running a TCP
+  stack to send that reset, so the machine is up and only the port is shut.
+  Only silence (timeout) or "no route" mean asleep. Do not "simplify" this
+  back to `except OSError: up = False`.
   NOT ICMP: a raw socket needs CAP_NET_RAW, which means a privileged
   container or a setuid ping in the image. A connect() needs neither.
   WOL_HOST unset => `online` is null => the panel says "status unknown"
   rather than drawing an offline dot it has not earned.
+  State changes are logged (not every probe -- this runs every few seconds
+  while the Home app is open), and state() reports probe_ports so the panel
+  can show host:ports when the dot is wrong.
 
 voice: intent `wake_computer`. Fast-path patterns sit ABOVE the wake_screen
   block in voice_assistant/fastpath.py and MUST stay there -- the screen owns

@@ -1,0 +1,490 @@
+/* Fingers training. See Training.tsx.
+
+   The stage is one framed container with everything inside it, because this
+   is a screen you look at from a hangboard two metres away: one ring, one
+   number, one word. The colour is the whole state -- red while you are
+   pulling, blue while you are not -- so it is readable before anything is
+   read. */
+
+.training {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  animation: view-in var(--dur-slow) var(--ease-out);
+}
+
+.training__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--frame);
+  border-radius: var(--radius);
+  /* --phase is the hue of whatever is happening; everything inside reads it
+     rather than knowing about work and rest itself. */
+  --phase: var(--text-dim);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.training__stage[data-kind='work'] {
+  --phase: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.training__stage[data-kind='rest'] {
+  --phase: var(--info);
+  border-color: var(--border-strong);
+}
+
+.training__stage.is-urgent {
+  border-color: var(--phase);
+}
+
+/* ---------------------------------------------------------------------------
+   Sonar — the ambient motion behind everything
+   --------------------------------------------------------------------------- */
+
+.training__sonar {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.training__sonar span {
+  position: absolute;
+  width: min(46vh, 340px);
+  aspect-ratio: 1;
+  border: 1px solid var(--phase);
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: training-sonar 4.2s var(--ease-out) infinite;
+}
+
+/* Paused freezes the room, not just the clock. */
+.training__stage[data-state='paused'] .training__sonar span {
+  animation-play-state: paused;
+}
+.training__stage[data-state='idle'] .training__sonar span,
+.training__stage[data-state='done'] .training__sonar span {
+  animation-duration: 7s;
+  opacity: 0;
+}
+
+@keyframes training-sonar {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Controls — top right of the container, as asked
+   --------------------------------------------------------------------------- */
+
+.training__controls {
+  position: absolute;
+  z-index: 4;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
+}
+
+.training__btn {
+  display: grid;
+  place-items: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  font-size: var(--text-lg);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.training__btn:active {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.training__btn--stop:active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+/* ---------------------------------------------------------------------------
+   Idle and done
+   --------------------------------------------------------------------------- */
+
+.training__idle {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.training__plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
+.training__plan span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.training__plan-n {
+  display: grid;
+  place-items: center;
+  width: 1.9em;
+  height: 1.9em;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  border-radius: 2px;
+}
+
+.training__done {
+  font-family: var(--font-head);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.training__start {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-width: 14rem;
+  min-height: calc(var(--touch-min) + 16px);
+  padding: 0 var(--space-6);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: #000;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--glow-soft);
+}
+
+:root[data-theme='light'] .training__start {
+  color: var(--surface-1);
+}
+
+.training__start:active {
+  background: var(--accent-bright);
+}
+
+.training__warn {
+  font-size: var(--text-xs);
+  color: var(--warn);
+}
+
+/* ---------------------------------------------------------------------------
+   Section banner
+   --------------------------------------------------------------------------- */
+
+/* Pinned to the stage's top edge rather than floated over the middle: at
+   1024x600 the dial reaches most of the way up, and a banner across it made
+   both unreadable for its two seconds. The scrim is what lets it sit over
+   the sonar without competing with it. */
+.training__banner {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: var(--space-3) calc(var(--touch-min) * 3) var(--space-5);
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--surface-1) 45%,
+    transparent 100%
+  );
+  animation: training-banner 2.4s var(--ease-out);
+}
+
+.training__banner-n {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--phase);
+}
+
+.training__banner-name {
+  font-family: var(--font-head);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+@keyframes training-banner {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  12%,
+  70% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The dial
+   --------------------------------------------------------------------------- */
+
+.training__dial {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: min(42vh, 320px);
+  aspect-ratio: 1;
+}
+
+.training__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Twelve o'clock, clockwise. */
+  transform: rotate(-90deg);
+}
+
+.training__ring-track {
+  fill: none;
+  stroke: var(--surface-3);
+  stroke-width: 6;
+}
+
+/* stroke-dashoffset is not a compositor property, but this is one stroke
+   redrawn ten times a second -- the same budget the timer cards already run
+   on, and the only honest way to draw a sweep. */
+.training__ring-fill {
+  fill: none;
+  stroke: var(--phase);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke var(--dur) var(--ease);
+}
+
+.training__stage.is-urgent .training__ring-fill {
+  filter: none;
+  stroke-width: 9;
+}
+
+/* One ping per second through the last three seconds. */
+.training__ping {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 2px solid var(--phase);
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: training-ping 1s linear infinite;
+}
+
+@keyframes training-ping {
+  0% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.training__readout {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.training__kind {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--phase);
+}
+
+/* The number is the view. Everything else on this screen is context for it. */
+.training__seconds {
+  font-size: clamp(5rem, 17vh, 9rem);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.training__stage.is-urgent .training__seconds {
+  color: var(--phase);
+  text-shadow: var(--glow);
+}
+
+.training__of {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------------------
+   Section, rounds, total
+   --------------------------------------------------------------------------- */
+
+.training__section {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-head);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-align: center;
+}
+
+.training__pips {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.training__pip {
+  width: 34px;
+  height: 6px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  transition: background-color var(--dur) var(--ease);
+}
+
+.training__pip.is-done {
+  background: var(--phase);
+  border-color: var(--phase);
+  opacity: 0.45;
+}
+
+.training__pip.is-now {
+  background: var(--phase);
+  border-color: var(--phase);
+  box-shadow: var(--glow-soft);
+}
+
+.training__total {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(100%, 520px);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.training__total-track {
+  flex: 1;
+  height: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.training__total-fill {
+  display: block;
+  height: 100%;
+  background: var(--phase);
+  transform-origin: left center;
+}
+
+.training__paused {
+  position: relative;
+  z-index: 2;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--warn);
+  animation: blink 1.6s steps(1, end) infinite;
+}
+
+/* Short panels: the dial gives up height first, then the plan list. */
+@media (max-height: 680px) {
+  .training__stage {
+    padding: var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .training__dial {
+    width: min(38vh, 240px);
+  }
+
+  .training__sonar span {
+    width: min(40vh, 260px);
+  }
+
+  .training__seconds {
+    font-size: clamp(3.5rem, 15vh, 6rem);
+  }
+
+  .training__banner {
+    padding-bottom: var(--space-3);
+  }
+
+  /* On a short panel the banner's two seconds sit over the top of the dial.
+     One size down is the difference between covering the WORK label and
+     clearing it. */
+  .training__banner-name {
+    font-size: var(--text-lg);
+  }
+}

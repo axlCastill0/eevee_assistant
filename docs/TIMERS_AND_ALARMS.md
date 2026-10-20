@@ -21,9 +21,18 @@ Settings page's dropdowns **immediately** — the directory is read per request,
 so there is no rebuild and no restart. The folder is gitignored: these are
 whole songs, personal, and nothing to do with the code.
 
-Then open **Settings** and pick one for *Timer end sound* and one for *Alarm
-end sound*. Until you do, a timer still fires and still shows its banner — it
-just does so silently, which the banner says.
+Then open **Settings** and pick one for `timer_sound`, one for `alarm_sound`
+and one for `training_sound`. Until you do, a timer still fires and still
+shows its banner — it just does so silently, which the banner says.
+
+**`training_sound` wants a very short file** — a beep, 100–300ms. It is the
+interval timer's cue and plays four times per phase (at the start and at 3, 2
+and 1 seconds remaining), so anything with a tail will still be sounding when
+the next cue lands. Drop it in the same folder as the rest:
+
+```bash
+scp ~/Sounds/beep.wav tako@<pi-address>:~/eevee_assistant/media/
+```
 
 ---
 
@@ -158,6 +167,38 @@ what time it is.
 There is no voice control for alarms (USER DECISION 2026-10-16): setting a
 recurring weekly commitment from a transcript is where a misheard word costs
 the most, and the screen is right there.
+
+---
+
+## 4b. Fingers training
+
+A third app behind the launcher, at `#/training`. A fixed hangboard session:
+
+| | |
+|---|---|
+| Sections | **4 finger half crimp**, **three fingers**, **two fingers** |
+| Each section | 6 rounds of 10s work and 20s rest |
+| Total | 9:00, ending on the sixth rest |
+
+It makes a sound at every phase start and at 3, 2 and 1 seconds remaining —
+`training_sound` in Settings — plus one when the session finishes. The only
+controls are in the container's top right: pause/resume, restart, and stop.
+
+Two things that are different from Timers and Alarms, both on purpose:
+
+- **It runs in the browser, not the backend.** This is a session you stand in
+  front of: it needs cue accuracy the backend's 1Hz polling cannot give, and
+  it is meaningless if you walk away. The schedule is absolute — every phase
+  and every cue is an offset from one start instant — so a late tick never
+  accumulates drift.
+- **Leaving the page ends the session.** There is no server-side state behind
+  it, so switching to another view stops it. Pause is the control for
+  stepping away.
+
+Nothing about the session is configurable, because nothing was asked to be:
+the shape of it is the point. `WORK_S`, `REST_S`, `REPS` and `SECTIONS` at the
+top of `apps/ui/src/views/Training.tsx` are the only source of truth — change
+one and the plan, the cues, the round pips and the clock all follow.
 
 ---
 

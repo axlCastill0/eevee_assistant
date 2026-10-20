@@ -49,9 +49,18 @@ log = logging.getLogger("wol")
 # meaningful. 7 and 0 are equally common.
 DEFAULT_PORT = 9
 
-DEFAULT_PROBE_PORT = 3389          # Windows Remote Desktop
+# Ports tried, in order, until one answers. A LIST rather than one port
+# (2026-10-19): 3389 only exists if Remote Desktop is enabled, and a PC that
+# was plainly awake read as offline for exactly that reason.
+#   3389 Windows Remote Desktop   445/139 Windows file sharing
+#   22   ssh                      5900 VNC
+# Override with WOL_PROBE_PORT, which takes a comma-separated list.
+DEFAULT_PROBE_PORTS = (3389, 445, 139, 22)
 _PROBE_TIMEOUT_S = 0.6             # a LAN machine answers in single-digit ms
 _PROBE_TTL_S = 5.0
+# Worst case per probe is len(ports) * _PROBE_TIMEOUT_S, and only while the
+# machine is down; a single answer ends the sweep.
+_MAX_PROBE_PORTS = 4
 
 # Accepts aa:bb:cc:dd:ee:ff, aa-bb-..., and bare aabbccddeeff.
 _MAC_RE = re.compile(r"^([0-9a-f]{2}[:-]?){5}[0-9a-f]{2}$", re.IGNORECASE)
@@ -131,6 +140,44 @@ def send() -> tuple[bool, str]:
     return True, f"waking {name()} now"
 
 
+def probe_ports() -> tuple[int, ...]:
+    """Ports to try, from WOL_PROBE_PORT. Junk entries are dropped."""
+    raw = _env("WOL_PROBE_PORT") or ""
+    ports: list[int] = []
+    for part in raw.replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            port = int(part)
+        except ValueError:
+            log.warning("WOL_PROBE_PORT entry %r is not a number; ignoring", part)
+            continue
+        if 1 <= port <= 65535:
+            ports.append(port)
+
+    return tuple(ports[:_MAX_PROBE_PORTS]) or DEFAULT_PROBE_PORTS
+
+
+def _answered(host: str, port: int) -> bool:
+    """Did anything at `host:port` respond at all?
+
+    A CONNECTION REFUSED COUNTS AS AWAKE. Something has to be running a TCP
+    stack to send that reset, so the machine is up and only the port is shut
+    -- which is the common case on a PC with a firewall and no listener. Only
+    silence (a timeout) or "no route" mean asleep.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=_PROBE_TIMEOUT_S):
+            return True
+    except ConnectionRefusedError:
+        return True
+    except OSError:
+        # Timed out, host unreachable, DNS failure. All of them read the same
+        # to the person looking at the panel: not reachable.
+        return False
+
+
 def online(force: bool = False) -> Optional[bool]:
     """True/False if a probe target is configured, None if it is not.
 
@@ -145,18 +192,24 @@ def online(force: bool = False) -> Optional[bool]:
     if not force and _probe_cache is not None and now - _probe_cache[0] < _PROBE_TTL_S:
         return _probe_cache[1]
 
-    try:
-        port = int(_env("WOL_PROBE_PORT") or DEFAULT_PROBE_PORT)
-    except ValueError:
-        port = DEFAULT_PROBE_PORT
+    was = _probe_cache[1] if _probe_cache is not None else None
 
-    try:
-        with socket.create_connection((host, port), timeout=_PROBE_TIMEOUT_S):
-            up = True
-    except OSError:
-        # Refused, timed out, no route, DNS failure -- all of them mean the
-        # same thing to the person looking at the panel: not reachable.
-        up = False
+    up = False
+    answered_on: Optional[int] = None
+    for port in probe_ports():
+        if _answered(host, port):
+            up, answered_on = True, port
+            break
+
+    # Logged only on a CHANGE: this runs every few seconds for as long as the
+    # panel sits on the Home app, and a line per probe would be the loudest
+    # thing in the log by an order of magnitude.
+    if up != was:
+        if up:
+            log.info("%s answered on port %d", host, answered_on)
+        else:
+            log.info("%s is not answering on %s", host,
+                     ", ".join(str(p) for p in probe_ports()))
 
     _probe_cache = (now, up)
     return up
@@ -172,4 +225,7 @@ def state() -> dict:
         # than drawing a confident offline dot it has not earned.
         "online": online(),
         "probe_host": _env("WOL_HOST"),
+        # Shown on the panel: when the dot is wrong, the port being tried is
+        # the first thing worth knowing.
+        "probe_ports": list(probe_ports()) if _env("WOL_HOST") else [],
     }

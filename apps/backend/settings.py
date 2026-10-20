@@ -47,6 +47,9 @@ DEFAULTS = {
     # ringing banner without audio rather than guessing at a file.
     "timer_sound": "",
     "alarm_sound": "",
+    # The interval timer's cue. Played at every phase start and at 3, 2 and 1
+    # seconds remaining, so it wants to be SHORT -- a beep, not a song.
+    "training_sound": "",
     # Minutes of no touch before the dashboard blanks the screen. "0" means
     # never. Stored as a string like everything else here; the dashboard
     # parses it, and a junk value reads as 0, which is the safe direction --
@@ -61,7 +64,7 @@ DEFAULTS = {
 
 # Sound settings are validated against the media directory; this one is not a
 # sound and must not be.
-_SOUND_KEYS = ("timer_sound", "alarm_sound")
+_SOUND_KEYS = ("timer_sound", "alarm_sound", "training_sound")
 
 
 def _path() -> str:

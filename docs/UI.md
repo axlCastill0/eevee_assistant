@@ -610,8 +610,19 @@ On a macOS dev host, against the real backend, at 1280x800 and 1024x600:
 Not verified — no hardware: real touch gestures, the Docker image building
 (no daemon on the dev host), Chromium kiosk, and actual framerate on a Pi.
 
+**Fingers training** — a fixed hangboard interval timer: three named
+sections, six rounds each of 10s work and 20s rest, nine minutes in total. One
+ring, one number, one word, readable from two metres; red while working, blue
+while resting; a ping per second through the last three. It is the only timer
+in this UI that runs client-side, and `docs/TIMERS_AND_ALARMS.md` §4b says why.
+
 **Home** — wake-on-LAN. One machine, one button, and a status dot that only
-promises something when `WOL_HOST` is set for the backend to probe. Named in
+promises something when `WOL_HOST` is set for the backend to probe. The probe
+tries a LIST of ports (`WOL_PROBE_PORT`, default `3389,445,139,22`) and takes
+the first answer, and a *connection refused* counts as awake — something has
+to be running a TCP stack to send that reset. Only silence means asleep. The
+card shows `host:ports`, because when the dot is wrong that is the first thing
+worth knowing. Named in
 `.env`, because there is no keyboard on this panel and a MAC address is set
 once. Full notes in `AGENT_CONTEXT.md` under `## wake on lan`.
 

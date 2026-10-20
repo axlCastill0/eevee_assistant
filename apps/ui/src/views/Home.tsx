@@ -347,6 +347,14 @@ function appTiles({
       live: enabled.length > 0,
     },
     {
+      route: 'training',
+      name: 'Fingers',
+      icon: 'pulse',
+      // Not a live reading: the session lives in its own view and there is no
+      // backend state to ask about it.
+      status: '3 × 6 · 9:00',
+    },
+    {
       route: 'wake',
       name: 'Home',
       icon: 'pc',

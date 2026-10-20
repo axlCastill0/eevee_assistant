@@ -141,6 +141,8 @@ export interface WakeState {
   mac: string
   online: boolean | null
   probe_host: string
+  /** Ports the backend tries, in order. Empty when no probe host is set. */
+  probe_ports?: number[]
 }
 
 export interface WakeResult extends WakeState {
@@ -170,6 +172,8 @@ export interface ClockState {
   settings: {
     timer_sound: string
     alarm_sound: string
+    /** The interval timer's cue. Short: it plays four times a phase. */
+    training_sound: string
     /** Minutes of no touch before the panel blanks. "0" = never. */
     screen_timeout_min: string
     sounds: SoundEntry[]
@@ -313,6 +317,7 @@ export function stopAlarm() {
 export function updateSettings(values: {
   timer_sound?: string
   alarm_sound?: string
+  training_sound?: string
   screen_timeout_min?: string
 }) {
   return put<ClockState['settings']>('/clock/settings', values)

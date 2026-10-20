@@ -43,6 +43,7 @@ export function Settings({
   const save = (values: {
     timer_sound?: string
     alarm_sound?: string
+    training_sound?: string
     screen_timeout_min?: string
   }) => {
     setError(null)
@@ -80,6 +81,14 @@ export function Settings({
           value={settings?.alarm_sound ?? ''}
           sounds={sounds}
           onChange={(file) => save({ alarm_sound: file })}
+        />
+
+        <SoundSetting
+          name="training_sound"
+          hint="the interval timer's cue — short, it plays four times a phase"
+          value={settings?.training_sound ?? ''}
+          sounds={sounds}
+          onChange={(file) => save({ training_sound: file })}
         />
 
         {sounds.length === 0 && (

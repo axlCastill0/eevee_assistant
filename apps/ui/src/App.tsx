@@ -20,6 +20,7 @@ import { Home } from './views/Home'
 import { NowPlaying } from './views/NowPlaying'
 import { Settings } from './views/Settings'
 import { Timers } from './views/Timers'
+import { Training } from './views/Training'
 import { Wake } from './views/Wake'
 
 export default function App() {
@@ -178,6 +179,12 @@ export default function App() {
 
         {route === 'alarms' && (
           <Alarms alarms={clock.data?.alarms.alarms ?? []} onChanged={clock.refresh} />
+        )}
+
+        {/* Mounting is what runs the session, and unmounting is what ends
+            it -- there is no backend state behind this one. */}
+        {route === 'training' && (
+          <Training sound={clock.data?.settings.training_sound ?? ''} />
         )}
 
         {route === 'wake' && <Wake />}
