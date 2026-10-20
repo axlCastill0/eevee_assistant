@@ -57,6 +57,12 @@ _DURATION = (rf"(half\s+an?\s+(hour|minute)|an?\s+hour\s+and\s+a\s+half|"
 
 # Each entry: (compiled pattern, intent, item-capture-group or None).
 # Patterns are fullmatch-anchored against the cleaned transcript.
+# Pages the panel can be sent to. "status" and "health" are deliberately NOT
+# here: they belong to system_health and always have.
+_PAGE = (r"(?P<page>dashboard|home\s+screen|home|main|launcher|"
+         r"music|spotify|player|now\s+playing|songs?|"
+         r"systems?|services|timers?|alarms?)")
+
 _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     # -- get_time ---------------------------------------------------------
     (re.compile(r"(what('?s| is)\s+)?the\s+time", re.I), "get_time", None),
@@ -65,6 +71,23 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
     (re.compile(r"time", re.I), "get_time", None),
     (re.compile(r"(tell|give)\s+me\s+the\s+time", re.I), "get_time", None),
     (re.compile(r"current\s+time", re.I), "get_time", None),
+
+    # -- show_page --------------------------------------------------------
+    # ABOVE system_health on purpose. "check systems" is the one phrase these
+    # two intents both want, and the USER assigned it to navigation
+    # (2026-10-19) -- the systems page answers the health question by showing
+    # it. Every other health phrasing ("check the services", "check
+    # everything", "system status", "is anything down") is left alone, and the
+    # `check` rule below is narrow enough not to touch them.
+    (re.compile(rf"(go|switch|change|take\s+me|bring\s+me|move)\s+(me\s+)?"
+                rf"(to\s+|over\s+to\s+|back\s+to\s+)?(the\s+)?{_PAGE}"
+                rf"(\s+(page|screen|view|tab))?", re.I), "show_page", "page"),
+    (re.compile(rf"(show|open|display|pull\s+up|bring\s+up|launch)\s+(me\s+)?"
+                rf"(the\s+)?{_PAGE}(\s+(page|screen|view|tab))?", re.I),
+     "show_page", "page"),
+    (re.compile(r"check\s+(the\s+)?(?P<page>systems?)"
+                r"(\s+(page|screen|view|tab))?", re.I), "show_page", "page"),
+    (re.compile(rf"{_PAGE}\s+(page|screen|view|tab)", re.I), "show_page", "page"),
 
     # -- system_health ----------------------------------------------------
     # There is exactly one health intent, covering every service at once, so

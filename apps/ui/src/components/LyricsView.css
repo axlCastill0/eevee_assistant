@@ -1,0 +1,145 @@
+/* The lyrics overlay. See LyricsView.tsx.
+
+   White type on whatever the cover painted, like the rest of the music view.
+   The only background it adds is a vertical scrim, because a bright cover
+   colour under 3rem of white text is unreadable from across a room. */
+
+.lyrics {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 30%,
+    rgba(0, 0, 0, 0.35) 70%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  animation: fade-in var(--dur) var(--ease);
+}
+
+.lyrics__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: clamp(var(--space-3), 1.6vw, var(--space-5));
+}
+
+.lyrics__meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.lyrics__title {
+  font-family: var(--font-head);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lyrics__artist {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.lyrics__unsynced {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-sm);
+}
+
+.lyrics__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  font-size: var(--text-lg);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+}
+
+.lyrics__close:active {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* ---------------------------------------------------------------------------
+   The lines
+   --------------------------------------------------------------------------- */
+
+.lyrics__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 0 clamp(var(--space-4), 5vw, var(--space-7));
+  text-align: center;
+}
+.lyrics__scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Lets the first and last line reach the middle of the view. */
+.lyrics__pad {
+  height: 42%;
+}
+
+.lyrics__line {
+  font-family: var(--font-head);
+  font-size: clamp(1.75rem, 3.4vw, 3.25rem);
+  font-weight: 600;
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  padding: clamp(var(--space-2), 0.8vw, var(--space-3)) 0;
+  color: rgba(255, 255, 255, 0.34);
+  /* Opacity and transform only, as everywhere else. */
+  transition:
+    opacity var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    transform var(--dur) var(--ease-out);
+}
+
+/* Sung already: dimmer still, so the eye is never pulled backwards. */
+.lyrics__line.is-past {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.lyrics__line.is-current {
+  color: #fff;
+  transform: scale(1.04);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* An instrumental gap: present, so the break reads as one, but small. */
+.lyrics__line.is-gap {
+  font-size: var(--text-lg);
+  color: rgba(255, 255, 255, 0.18);
+}
+
+/* An unsynced set has no current line, so nothing is dimmed -- it is a page
+   of text to read, not a track to follow. */
+.lyrics:has(.lyrics__unsynced) .lyrics__line {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: clamp(1.375rem, 2.4vw, 2.125rem);
+}

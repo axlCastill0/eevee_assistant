@@ -142,6 +142,7 @@ Expected: *"Everything good."* If the voice container has not been running for
 | `greeting` | "hello", "good morning" | time of day + health |
 | `repeat_last` | "say that again", "what was that" | last spoken line |
 | `set_theme` | "dark mode", "switch to auto" | pushes to the dashboard |
+| `show_page` | "go to music", "check systems", "take me back to the dashboard" | pushes to the dashboard |
 | `sleep_screen` | "turn the screen off", "good night" | pushes to the dashboard |
 | `wake_screen` | "wake up", "screen on" | pushes to the dashboard |
 | `get_weather` | "what's the weather", "do I need a jacket" | Open-Meteo |
@@ -151,7 +152,15 @@ Expected: *"Everything good."* If the voice container has not been running for
 | `unknown` | anything else | — |
 
 Every one has at least three phrasings and never repeats itself back-to-back.
-`set_theme` is the only intent that takes an item (`dark`, `light`, `auto`).
+Four intents take an item: `set_theme` (`dark`/`light`/`auto`), `show_page`
+(`dashboard`/`music`/`systems`, and `timers`/`alarms` if you name them),
+`set_timer` and `cancel_timer`.
+
+**"check systems" navigates, it does not report.** That phrase belongs to
+`show_page` (USER 2026-10-19) because the systems page answers the question by
+showing it. Every other health phrasing — "is everything ok", "is anything
+down", "check the services" — is still `system_health` and still answers out
+loud. Settings has no voice route on purpose.
 
 **Weather needs a location.** Open-Meteo needs no account and no key, but it
 does need coordinates — set `WEATHER_LAT`, `WEATHER_LON` and optionally

@@ -16,6 +16,7 @@ import logging
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse
 
+import lyrics
 import spotify
 from auth import require_api_key
 
@@ -47,6 +48,21 @@ def command(action: str = Body(..., embed=True)):
     if result["status"] == "unsupported":
         raise HTTPException(status_code=400, detail=f"Unknown action {action!r}")
     return result
+
+
+@router.get("/lyrics")
+def track_lyrics():
+    """Lyrics for whatever is playing, from LRCLIB. Cached per track.
+
+    Reads the CACHED playback snapshot rather than asking Spotify again: the
+    panel polls now-playing once a second already, and this must not double
+    that. Always 200 with a `status`, for the same reason /now-playing is.
+    """
+    snap = spotify.snapshot()
+    if snap.get("status") != "ok" or not snap.get("item"):
+        return {"status": "idle"}
+
+    return lyrics.lookup(snap["item"])
 
 
 @router.get("/art/{image_id}")

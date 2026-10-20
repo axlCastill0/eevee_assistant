@@ -264,6 +264,7 @@ All under `/spotify`, all requiring `X-API-Key` **except the callback**:
 | Route | Does |
 |---|---|
 | `GET /now-playing` | the snapshot. Always 200; read `status` |
+| `GET /lyrics` | lyrics for whatever is playing. Always 200; read `status` |
 | `POST /command` | `{"action": "previous\|play\|pause\|toggle\|next"}` |
 | `GET /art/{id}` | one cover image |
 | `GET /status` | configured? connected? |
@@ -277,6 +278,37 @@ nginx only injects it on `/api/*`. It is protected instead by the single-use
 `state` that `/login` mints, and `/login` *does* require the key: no key means
 no state, and no state means the callback refuses. Same split as the
 WebSocket route in `routes/voice.py`.
+
+---
+
+## 6b. Lyrics
+
+The lyrics button, top right of the music view, opens a full-screen lyrics
+page over the same drifting cover colours. It is **disabled whenever the
+current track has no lyrics**, which is most of what it tells you.
+
+Lyrics do not come from Spotify. Spotify's own lyrics are Musixmatch's and are
+not exposed in the public Web API at all, so this uses
+[LRCLIB](https://lrclib.net): no account, no key, no signup, and it returns
+LRC — lines with timestamps — which is the point. A wall of untimed text on a
+panel across the room is not worth the screen.
+
+- `GET /api/spotify/lyrics` reads the **cached** playback snapshot rather than
+  asking Spotify again, so it cannot double the 1Hz now-playing poll. Results
+  are cached per track id.
+- Matching is strict on purpose: artist + track + album + duration first, then
+  a search, and a search hit is accepted only when its duration is within a
+  few seconds of the track Spotify is actually playing. A confidently wrong
+  set of lyrics scrolling in time with the music is worse than none, so a
+  near-miss reports `none` and the button stays disabled.
+- The panel highlights the line being sung from the same interpolated progress
+  the bar uses, and keeps it centred. If LRCLIB only has an untimed set, the
+  page says `not timed · scroll` and you read it by finger.
+- Nothing is stored on disk and nothing is sent anywhere else: the request
+  carries the track's title, artist, album and length, and nothing about you.
+
+Statuses: `ok`, `none` (nobody has them), `instrumental` (the database says
+there are none to have), `idle` (nothing playing), `unreachable`.
 
 ---
 
@@ -312,6 +344,20 @@ That is `404 NO_ACTIVE_DEVICE`. Start a track elsewhere first — see section 0.
 ### Controls say "Spotify Premium is required"
 
 Reading works on free accounts, writing does not. Nothing to fix.
+
+### The lyrics button is always greyed out
+
+It is disabled per track, so first try a well-known song. If it is disabled
+for everything, check the backend log for `LRCLIB`: a container with no DNS or
+no CA certificates cannot reach `lrclib.net`, and weather would be broken too.
+Podcasts never have lyrics and are rejected before the lookup.
+
+### The lyrics are the wrong song's
+
+Report it to LRCLIB rather than here — the match is pinned to the track's
+duration, so a wrong hit means their database has a wrong duration. Nothing on
+the Pi caches it longer than the backend runs; restarting the backend clears
+it.
 
 ### The background colours look wrong or stay neutral
 

@@ -127,8 +127,8 @@ Scaled for touch:
 ### Size
 
 The whole type ramp was scaled up ~20% on 2026-10-19 (USER: the panel is read
-from across the room), along with `--touch-min` (56 → 64px) and `--row-h`
-(68 → 80px). The ramp moved together rather than a few headings, so the
+from across the room) and then a further ~6% on the same day, along with
+`--touch-min` (56 → 68px) and `--row-h` (68 → 86px). The ramp moved together rather than a few headings, so the
 relationships the design was drawn with still hold.
 
 That does not fit a 600px-high panel on its own, so every view has a
@@ -165,7 +165,7 @@ These are enforced throughout and are the reason the UI looks the way it does:
 5. `prefers-reduced-motion` disables everything — also a one-line escape hatch
    if the Pi turns out slower than expected.
 
-Payload: 283 KB JS (88 KB gzip), 56 KB CSS (10 KB gzip), 95 KB fonts.
+Payload: 285 KB JS (88 KB gzip), 59 KB CSS (11 KB gzip), 95 KB fonts.
 
 ### Fonts
 
@@ -614,6 +614,29 @@ Not verified — no hardware: real touch gestures, the Docker image building
 promises something when `WOL_HOST` is set for the backend to probe. Named in
 `.env`, because there is no keyboard on this panel and a MAC address is set
 once. Full notes in `AGENT_CONTEXT.md` under `## wake on lan`.
+
+### Lyrics
+
+A button in the top right of the music view opens a full-screen lyrics page
+over the same drifting cover colours — big Lexend, the line being sung in
+white, the rest dimmed, scrolled to stay centred. It follows the song from the
+same interpolated `progressMs` the progress bar uses, so it needs no second
+clock.
+
+The button is **disabled whenever the track has no lyrics**, which is most of
+the information it carries. Lines come from LRCLIB through
+`GET /api/spotify/lyrics`; the matching rules, the statuses and the privacy
+note are in `docs/SPOTIFY.md` §6b.
+
+Two details worth keeping if this is ever rewritten:
+
+- the hook fetches once per **track id**, not per poll, and retries while the
+  answer's `track_id` does not match the track on screen — the backend's
+  playback snapshot can lag a skip by up to a second, and the worst possible
+  failure for this feature is the previous song's words scrolling under the
+  new one
+- an untimed set is not shown as if it were timed. It says `not timed ·
+  scroll`, dims nothing, and is read by finger
 
 ### Motion on the Music view
 

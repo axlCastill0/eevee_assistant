@@ -57,6 +57,26 @@ export interface NowPlaying {
   degraded?: 'unreachable' | 'rate_limited'
 }
 
+/** Lyrics for the current track, from LRCLIB via the backend.
+ *
+ *  `idle` means nothing is playing; `none` means nobody has lyrics for this
+ *  track; `instrumental` means the database says there are none to have.
+ *  Only `ok` carries lines, and only `synced` lines have a `t`. */
+export type LyricsStatus = 'ok' | 'none' | 'instrumental' | 'idle' | 'unreachable'
+
+export interface LyricLine {
+  /** Seconds into the track. Null on an unsynced set. */
+  t: number | null
+  text: string
+}
+
+export interface Lyrics {
+  status: LyricsStatus
+  track_id?: string
+  synced?: boolean
+  lines?: LyricLine[]
+}
+
 export type SpotifyAction = 'previous' | 'next' | 'play' | 'pause' | 'toggle'
 
 export interface CommandResult {
@@ -323,6 +343,10 @@ export function sendWake() {
 
 export function fetchNowPlaying() {
   return get<NowPlaying>('/spotify/now-playing')
+}
+
+export function fetchLyrics() {
+  return get<Lyrics>('/spotify/lyrics')
 }
 
 export function sendSpotifyCommand(action: SpotifyAction) {

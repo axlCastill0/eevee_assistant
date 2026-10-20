@@ -459,11 +459,13 @@
   animation: slide-up var(--dur) var(--ease-out);
 }
 
+/* Top LEFT: the lyrics button owns the right corner now, and two badges
+   stacked on each other read as one broken one. */
 .np__stale {
   position: absolute;
   z-index: 2;
   top: clamp(var(--space-3), 1.5vw, var(--space-5));
-  right: clamp(var(--space-3), 1.5vw, var(--space-5));
+  left: clamp(var(--space-3), 1.5vw, var(--space-5));
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.45);
@@ -563,4 +565,42 @@
   66% {
     transform: translate3d(-4%, 11%, 0) scale(1.2);
   }
+}
+
+/* ---- lyrics ---- */
+
+/* Top right of the view, which is otherwise empty -- the stage is centred and
+   this page has no status line to collide with. Disabled when nobody has
+   lyrics for the track, which is most of the information it carries. */
+.np__lyrics-btn {
+  position: absolute;
+  z-index: 2;
+  top: clamp(var(--space-3), 1.6vw, var(--space-5));
+  right: clamp(var(--space-3), 1.6vw, var(--space-5));
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-sm);
+  transition:
+    opacity var(--dur) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.np__lyrics-btn:active {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.np__lyrics-btn:disabled {
+  opacity: 0.3;
+  background: transparent;
 }

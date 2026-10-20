@@ -128,6 +128,14 @@ INTENTS: dict[str, Intent] = {
         ),
         needs_item=True,
     ),
+    "show_page": Intent(
+        name="show_page",
+        description=(
+            "switch the dashboard to a page. item is 'dashboard', 'music' "
+            "or 'systems'"
+        ),
+        needs_item=True,
+    ),
     "wake_screen": Intent(
         name="wake_screen",
         description="turn the dashboard screen back on, wake the display",
@@ -364,6 +372,57 @@ def _set_theme(item: Optional[str]) -> tuple[str, bool]:
         f"Switching to {theme} mode.",
         f"{theme.capitalize()} mode it is.",
         f"Done. {theme.capitalize()} mode.",
+    ), True
+
+
+# Spoken page names -> routes. Synonyms are here rather than in the
+# classifier's prompt because the fast path emits raw words straight from the
+# user's sentence and both callers need the same vocabulary.
+_PAGES: dict[str, str] = {
+    "dashboard": "dashboard", "home": "dashboard", "main": "dashboard",
+    "launcher": "dashboard", "home screen": "dashboard",
+    "music": "music", "spotify": "music", "song": "music", "player": "music",
+    "now playing": "music", "playing": "music",
+    "systems": "systems", "system": "systems", "services": "systems",
+    "status": "systems", "health": "systems", "diagnostics": "systems",
+    # Not advertised to the classifier -- "timer" and "alarm" are load-bearing
+    # words for the timer intents and must not start competing with them. The
+    # fast path can still reach these from an explicit "go to timers".
+    "timers": "timers", "timer": "timers",
+    "alarms": "alarms", "alarm": "alarms",
+}
+
+_PAGE_LABELS: dict[str, str] = {
+    "dashboard": "the dashboard",
+    "music": "music",
+    "systems": "systems",
+    "timers": "timers",
+    "alarms": "alarms",
+}
+
+
+def _show_page(item: Optional[str]) -> tuple[str, bool]:
+    # Collapse whitespace: the fast path hands over the user's own words, and
+    # "now  playing" is the same page as "now playing".
+    page = _PAGES.get(" ".join((item or "").lower().split()))
+
+    if page is None:
+        return _pick(
+            "I can show the dashboard, music, or systems.",
+            "Dashboard, music, or systems — which one?",
+            "Try dashboard, music, or systems.",
+        ), False
+
+    # The panel does the navigating; this only says where to go. A browser
+    # that is not listening (none is, today, except the kiosk) simply stays
+    # where it is -- there is no server-side notion of "the current page".
+    events.hub.publish_command("navigate", page)
+
+    label = _PAGE_LABELS.get(page, page)
+    return _pick(
+        f"Opening {label}.",
+        f"Here's {label}.",
+        f"{label.capitalize()} it is.",
     ), True
 
 
@@ -781,6 +840,7 @@ _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "greeting": _greeting,
     "repeat_last": _repeat_last,
     "set_theme": _set_theme,
+    "show_page": _show_page,
     "wake_screen": _wake_screen,
     "sleep_screen": _sleep_screen,
     "get_weather": _get_weather,

@@ -779,9 +779,30 @@ colours: lib/coverColors.ts draws the cover into a 32x32 canvas, buckets into
   flat wash. Two stacked gradient layers crossfade on track change, because a
   gradient cannot transition and an opacity can.
 
+lyrics (2026-10-19, USER): apps/backend/lyrics.py + components/LyricsView.tsx.
+  SOURCE IS LRCLIB (lrclib.net), not Spotify: Spotify's lyrics are
+  Musixmatch's and are not in the public Web API at all. No account, no key,
+  urllib like weather.py.
+  GET /api/spotify/lyrics reads the CACHED playback snapshot -- it must never
+  double the 1Hz now-playing poll -- and returns
+  status: ok | none | instrumental | idle | unreachable, plus track_id and
+  lines [{t, text}]. Cached per track id, LRU.
+  MATCHING IS DELIBERATELY STRICT: /api/get by artist+track+album+duration
+  first, then /api/search, and a search hit is accepted only if its duration
+  is within a few seconds. Wrong lyrics scrolling in time with the music are
+  worse than none, so a near-miss returns `none` and the button stays
+  disabled. VERIFIED 2026-10-19 against the live API: exact hit -> synced,
+  search fallback -> synced, deliberately wrong duration -> none.
+  The UI fetches once per TRACK ID (not per poll) and retries while the
+  returned track_id does not match the track on screen, because the snapshot
+  can lag a skip by up to a second.
+  The view highlights the current line from the SAME interpolated progressMs
+  the progress bar uses, and keeps it centred with scrollIntoView.
+
 spotify_rules: their design guidelines are mandatory for API users. Keep the
   SPOTIFY attribution, do not alter album art, do not mix other content
-  sources into the view.
+  sources into the view. Lyrics are LRCLIB's, shown on their own screen, and
+  are not presented as Spotify's.
 ```
 
 ## service independence
@@ -827,9 +848,23 @@ adding_an_intent:
   NOTHING in apps/voice/ needs to change for a new intent.
 
 current_intents: [system_health, get_time, get_date, greeting, repeat_last,
-                  set_theme, wake_screen, sleep_screen, get_weather,
-                  list_capabilities, get_uptime, cpu_temp, unknown]
-  set_theme is the ONLY one with needs_item: true (dark|light|auto)
+                  set_theme, show_page, wake_screen, sleep_screen,
+                  get_weather, list_capabilities, get_uptime, cpu_temp,
+                  set_timer, cancel_timer, timer_status, play_music,
+                  pause_music, next_track, previous_track, restart_track,
+                  wake_computer, unknown]
+  needs_item: true -> set_theme (dark|light|auto), show_page (dashboard|
+    music|systems, plus timers|alarms which the fast path can reach but the
+    classifier is not told about), set_timer, cancel_timer
+
+show_page (2026-10-19, USER): voice navigation. The handler publishes a
+  `navigate` command and says where it is going; the PANEL does the moving,
+  because there is no server-side notion of "the current page". Synonyms live
+  in intents._PAGES, not in the prompt, because the fast path hands over the
+  user's own words. "check systems" was given to navigation rather than to
+  system_health ON PURPOSE -- the systems page answers that question by
+  showing it -- and every other health phrasing still routes to
+  system_health. Settings is deliberately NOT reachable by voice.
 
 system_health:
   scope: ALL services at once. There is deliberately NO per-service intent -
@@ -1039,6 +1074,9 @@ NOT RETAINED, and outside the state sequence. A command is a thing that
 
 commands:
   set_theme     value dark|light|auto -> useTheme.choose(), persisted
+  navigate      value = a route name -> navigate(); App VALIDATES it against
+                ROUTES before using it, because the backend's page vocabulary
+                and the bundle's route list are two lists that can drift
   sleep_screen  -> ScreenVeil
   wake_screen   -> clears it
 

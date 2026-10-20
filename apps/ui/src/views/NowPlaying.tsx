@@ -22,7 +22,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { artUrl, fetchSpotifyLogin, type NowPlaying as Snapshot } from '../lib/api'
 import { coverColors, NEUTRAL, type CoverColors } from '../lib/coverColors'
+import { useLyrics } from '../lib/useLyrics'
 import { useSpotify } from '../lib/useSpotify'
+import { Icon } from '../components/Term'
+import { LyricsView } from '../components/LyricsView'
 import './NowPlaying.css'
 
 /** mm:ss, and h:mm:ss only when a track is actually that long (podcasts). */
@@ -79,6 +82,19 @@ export function NowPlaying({ active }: { active: boolean }) {
     }
   }, [art, front])
 
+  // Lyrics, from LRCLIB via the backend. Fetched once per track; `null` means
+  // the answer for THIS track has not arrived yet, which is what keeps the
+  // button disabled rather than showing the last song's words.
+  const lyrics = useLyrics(item?.id ?? null, active)
+  const hasLyrics = lyrics?.status === 'ok' && (lyrics.lines?.length ?? 0) > 0
+  const [showLyrics, setShowLyrics] = useState(false)
+
+  // A skip into a track nobody has lyrics for closes the view rather than
+  // leaving an empty one up.
+  useEffect(() => {
+    if (showLyrics && lyrics !== null && !hasLyrics) setShowLyrics(false)
+  }, [showLyrics, lyrics, hasLyrics])
+
   const duration = item?.duration_ms ?? 0
   // Clamped: a stale snapshot plus local advance can overshoot by a tick at
   // the end of a track, and a bar wider than its track looks broken.
@@ -113,6 +129,19 @@ export function NowPlaying({ active }: { active: boolean }) {
           <span className="np__sheen" />
         </div>
       ))}
+
+      {item && !showLyrics && (
+        <button
+          type="button"
+          className="np__lyrics-btn"
+          disabled={!hasLyrics}
+          aria-label={hasLyrics ? 'Show lyrics' : 'No lyrics for this track'}
+          onClick={() => setShowLyrics(true)}
+        >
+          <Icon name="list" />
+          <span>lyrics</span>
+        </button>
+      )}
 
       {item ? (
         <div className="np__stage">
@@ -229,6 +258,16 @@ export function NowPlaying({ active }: { active: boolean }) {
         </div>
       ) : (
         <Empty snapshot={data} loading={loading} error={error} />
+      )}
+
+      {item && showLyrics && hasLyrics && lyrics && (
+        <LyricsView
+          lyrics={lyrics}
+          title={item.title}
+          artist={item.artist}
+          progressMs={progressMs}
+          onClose={() => setShowLyrics(false)}
+        />
       )}
 
       {notice && <div className="np__notice">{NOTICES[notice] ?? notice}</div>}

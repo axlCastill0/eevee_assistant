@@ -10,7 +10,7 @@ import { setScreen, stopAlarm, stopRingingTimers } from './lib/api'
 import { useClock } from './lib/useClock'
 import { useClockState } from './lib/useClockState'
 import { useIdle } from './lib/useIdle'
-import { useRoute } from './lib/useRoute'
+import { navigate, ROUTES, useRoute, type Route } from './lib/useRoute'
 import { useServices } from './lib/useServices'
 import { useTheme } from './lib/useTheme'
 import { useVoiceEvents } from './lib/useVoiceEvents'
@@ -74,6 +74,14 @@ export default function App() {
       case 'set_theme':
         if (command.value === 'light' || command.value === 'dark' || command.value === 'auto') {
           choose(command.value)
+        }
+        break
+      case 'navigate':
+        // Validated here rather than trusted: the backend's page vocabulary
+        // and this bundle's route list are two lists that can drift, and a
+        // bad hash would land on the launcher silently.
+        if ((ROUTES as readonly string[]).includes(command.value ?? '')) {
+          navigate(command.value as Route)
         }
         break
       case 'sleep_screen':

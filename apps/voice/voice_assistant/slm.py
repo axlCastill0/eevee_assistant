@@ -52,8 +52,9 @@ Valid intents:
 
 Rules:
 - Pick exactly one intent. Never invent intent names.
-- "item" is the subject being asked about, lowercase, no articles. Only
-  set_theme takes one today: "dark", "light" or "auto". Everything else is null.
+- "item" is the subject being asked about, lowercase, no articles. Two intents
+  take one: set_theme ("dark", "light" or "auto") and show_page ("dashboard",
+  "music" or "systems"). Everything else is null.
 - For intents that take no item, "item" MUST be null.
 - Health questions cover ALL services at once. "is the voice pipeline up" is
   still system_health with item null, not a per-service query.
@@ -94,6 +95,15 @@ Output: {{"intent": "set_theme", "item": "dark"}}
 
 User: "switch the panel back to automatic"
 Output: {{"intent": "set_theme", "item": "auto"}}
+
+User: "go to music"
+Output: {{"intent": "show_page", "item": "music"}}
+
+User: "take me back to the dashboard"
+Output: {{"intent": "show_page", "item": "dashboard"}}
+
+User: "check systems"
+Output: {{"intent": "show_page", "item": "systems"}}
 
 User: "kill the screen for now"
 Output: {{"intent": "sleep_screen", "item": null}}
