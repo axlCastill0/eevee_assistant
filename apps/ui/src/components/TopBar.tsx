@@ -5,9 +5,8 @@ import { StatusIcons } from './StatusIcons'
 import { VoicePill } from './VoicePill'
 import './TopBar.css'
 
-/** The theme control moved to the Settings page on 2026-10-16, which is what
- *  freed the room here for status icons. Those are the point of this bar: it
- *  is a status strip, not a control strip. */
+/** A status strip, not a control strip -- the one exception is the screen-off
+ *  button. The theme control lives on the Settings page. */
 export function TopBar({
   now,
   clockSynced,
@@ -73,10 +72,8 @@ export function TopBar({
 
         <StatusIcons timerCount={timerCount} alarmSoon={alarmSoon} />
 
-        {/* Screen off. Last in the row because it is the only destructive
-            control up here -- destructive in the sense that it hides
-            everything else -- and because a thumb reaching the corner should
-            not pass over the status icons on the way. */}
+        {/* Screen off. Last in the row: it is the only control here that
+            hides everything else. */}
         <button
           type="button"
           className="topbar__sleep"

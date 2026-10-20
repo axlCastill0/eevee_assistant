@@ -48,10 +48,7 @@ export default function App() {
     [refreshClock],
   )
 
-  // Local state drives the veil so a tap is instant; the POST is what tells
-  // the host agent to switch the actual backlight, and the poll below keeps
-  // this in step with the other two things that can change it (a voice
-  // command, or the button pressed in another browser).
+  // Local state for an instant veil; the POST is what the host agent follows.
   const sleepScreen = useCallback(
     (source: string) => {
       setScreenOff(true)
@@ -92,17 +89,14 @@ export default function App() {
     }
   }, [command, choose])
 
-  // Follow the backend. A voice "screen off" reaches the dashboard twice: as
-  // a WebSocket command (instant, handled above) and as this state (up to a
-  // second later). The second is what makes a browser opened afterwards, or
-  // one that missed the command, agree with the panel.
+  // Follow the backend, so a browser that missed the WebSocket command (or
+  // was opened afterwards) still agrees with the panel.
   const serverScreenOn = clock.data?.screen.on
   useEffect(() => {
     if (serverScreenOn !== undefined) setScreenOff(!serverScreenOn)
   }, [serverScreenOn])
 
-  // Blank after a spell with no touch, when Settings asks for it. Zero, the
-  // default, disables it entirely rather than setting a very long timer.
+  // Idle blank, per Settings. Zero disables it.
   const timeoutMin = Number(clock.data?.settings.screen_timeout_min ?? '0')
   const idleMs = Number.isFinite(timeoutMin) && timeoutMin > 0 ? timeoutMin * 60_000 : 0
   const idle = useIdle(idleMs)

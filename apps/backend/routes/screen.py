@@ -1,9 +1,8 @@
 """Screen power state.
 
-Its own router rather than a corner of /clock because the consumer is
-different: `scripts/screen-agent.sh` runs on the host, outside Docker, and
-polls GET /screen on its own cadence. The dashboard reads the same state out
-of /clock/state, which it is already polling once a second.
+Its own router because the consumer is scripts/screen-agent.sh on the host,
+polling on its own cadence. The dashboard reads the same state out of
+/clock/state, which it already polls.
 """
 import logging
 

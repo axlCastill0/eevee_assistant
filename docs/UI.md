@@ -244,11 +244,10 @@ a dark panel lights it up before you have finished the sentence. Deliberately
 only on `listening` — waking on `speaking` too would make "turn the screen
 off" switch the panel straight back on while it answered.
 
-The veil in the UI is instant but cosmetic. The **backlight** is switched by
-`scripts/screen-agent.sh` running on the Pi outside Docker, because neither a
-browser nor a container can reach the device; it polls that same state. See
-"The screen agent" in `README_PI.md`. Without it the panel still goes black
-and still wakes on touch — it is just not actually dark.
+The veil is instant but cosmetic. The display itself is switched by
+`scripts/screen-agent.sh` on the Pi, which polls that same state — see "The
+screen agent" in `README_PI.md`. Without it the panel still goes black and
+still wakes on touch, it is just not actually off.
 
 Touch input keeps working with the backlight off, which is what makes
 tap-to-wake possible at all.

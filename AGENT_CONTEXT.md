@@ -659,16 +659,22 @@ slm_context_window:
   estimate 1257 tokens (the estimator errs high on purpose), so 2048 holds
   about 30 more intents before it grows itself.
 
-screen_backlight_values:
-  bl_power is 0 = on, 1 = off. NOT 4. Some drivers accept 4
-  (FB_BLANK_POWERDOWN) and others ignore it silently, which presents as a
-  panel that is "off" and still glowing. On Pi OS Lite /sys/class/backlight
-  can be EMPTY until dtoverlay=rpi-backlight is set, which makes the agent
-  fall through to a method that may not darken the panel at all.
-  vcgencmd display_power is DEAD on a Pi 5 (firmware refuses it under
-  vc4-kms-v3d) -- it is a last-resort fallback for older boards only.
-  Only the sysfs method physically darkens a panel; the compositor methods
-  cut the video signal and leave the decision to the display.
+screen_off:
+  RESOLVED 2026-10-19 on the real Pi. This panel is HDMI (card1-HDMI-A-2,
+  EDID "MPI107"), the session is labwc/Wayland, and the working method is
+  `wlr-randr --output HDMI-A-2 --off`, which genuinely darkens it.
+  Ruled out on this hardware, do not retry:
+    /sys/class/backlight  EMPTY -- HDMI has no kernel backlight device, and
+                          dtoverlay=rpi-backlight is for the DSI display only
+    ddcutil               panel answers EDID but "DDC communication failed"
+    xset                  X11 is not running
+    vcgencmd display_power  refused by Pi 5 firmware under vc4-kms-v3d
+    uhubctl               would work but the Pi 5's USB ports are GANGED, so
+                          it would cut the USB mic and speaker too
+  The agent must run INSIDE the kiosk session: over SSH it has no
+  WAYLAND_DISPLAY and now exits with a message rather than guessing. It was
+  never installed before 2026-10-19, which is why the panel only ever dimmed
+  to a black page while staying lit.
 
 utc_by_default:
   A container's local time is UTC no matter what the host says. Found on the
@@ -1366,6 +1372,7 @@ xterm_is_required:
 | 2026-10-19 | SLM sizes its own context window from the prompt | the 22nd intent pushed the system prompt to 1048 tokens into a 1024 window and llama.cpp refused to run, crash-looping the voice container for DAYS. Adding an intent must never be able to do that again |
 | 2026-10-19 | a failed classifier degrades to fast-path-only, never exits | on an always-on panel a crash loop is invisible (the pill just reads offline) and writes logs as fast as it can. A degraded assistant beats a dead one |
 | 2026-10-19 | container logs capped at 10MB x 3 | the json-file driver is UNLIMITED by default, so the crash loop above was also filling the SD card |
+| 2026-10-19 | agent keeps three methods only: sysfs backlight, wlr-randr, xset | ddcutil and vcgencmd were tried and ruled out on this hardware (see `## container gotchas`), and carrying dead branches in a script that runs unattended is cost without benefit. USER asked for less in the codebase |
 | 2026-10-19 | screen agent writes bl_power=1, not 4 | 0/1 is what the Pi's backlight driver documents; 4 (FB_BLANK_POWERDOWN) works on some drivers and is SILENTLY IGNORED by others, which looks exactly like "off but still lit" |
 | 2026-10-16 | ANY wake-word trigger wakes the screen, on `listening` only | USER. Having to touch a dark panel you have already spoken to feels broken. `listening` and not the later stages: the same utterance's `speaking` event would undo a "screen off" command it was in the middle of carrying out |
 | 2026-10-16 | idle timeout defaults to 30 minutes, not never | USER. Long enough never to blank mid-glance; any voice trigger wakes it, so the cost of it being wrong is one word |
@@ -1541,6 +1548,13 @@ passed:
      wheel does not move a scroll-snap wheel; the read-back was driven
      programmatically instead), the aura/sheen animations' real cost on a Pi
      GPU, and audible playback."
+  - "2026-10-19 macOS: ddcutil path driven with a stand-in `ddcutil` on PATH
+     and no backlight file or DISPLAY, which reproduces the user's Pi.
+     Detection picks ddcutil; off sends `setvcp 10 0` then `setvcp D6 05`;
+     wake sends `D6 01` then restores the brightness READ FROM THE PANEL (64
+     in the test), not a guessed 100. Moving that read above the --test block
+     was needed for the test path to restore correctly.
+     NOT VERIFIED: a real DDC/CI panel."
   - "2026-10-19 macOS: SLM context sizing against the REAL 22-intent
      prompt -- 4022 chars, estimated 1257 tokens (vs the 1048 llama.cpp
      actually counted on the Pi, so the estimate errs high as designed),

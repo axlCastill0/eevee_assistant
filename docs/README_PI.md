@@ -798,89 +798,40 @@ starting.
 
 ### 8.5 The screen agent (real screen off)
 
-The dashboard can black itself out on its own, but a black page on a lit
-panel is still a lit panel — in a dark room it is just as bright. Switching
-the actual backlight needs something on the host: the browser cannot, and
-neither can the backend, which is in a container with no access to the device.
+The dashboard blacks itself out on its own, but a black page on a lit panel is
+still a lit panel. Switching the display off for real needs something on the
+host: the browser cannot, and neither can the backend, which is in a container
+with no access to the device.
 
-`scripts/screen-agent.sh` is that piece. It polls the dashboard's own nginx
-(which injects the API key, so the script holds no secret) and switches the
-display whenever the state changes.
+`scripts/screen-agent.sh` is that piece. It polls the ui's nginx (which injects
+the API key, so the script holds no secret) and switches the display whenever
+the state changes.
 
 Four things change it:
 
 | | |
 |---|---|
 | the top-bar power button | off |
-| "screen off", "lights out", "good night", "turn it off" | off |
+| "screen off", "lights out", "good night" | off |
 | no touch for 30 minutes (Settings) | off |
-| a touch anywhere, **or the wake word firing at all** | on |
+| a touch anywhere, **or the wake word firing** | on |
 
-That last one matters: saying "hey jarvis" to a dark panel wakes it before you
-have finished the sentence, so you never have to touch a black screen you have
-already spoken to. It triggers on the pipeline reporting `listening` and
-nothing later in the utterance, which is why "turn the screen off" does not
-immediately undo itself.
+That last one matters: speaking to a dark panel wakes it before you finish the
+sentence, so you never touch a black screen you have already spoken to.
 
-It picks a method at startup, in this order:
-
-| Method | For | Needs |
-|---|---|---|
-| `/sys/class/backlight/*/bl_power` | DSI panels, incl. the official touchscreen | write access, see below |
-| `wlopm --off '*'` | Wayland (labwc, wayfire) | `wlopm` installed, `WAYLAND_DISPLAY` set |
-| `wlr-randr --output … --off` | Wayland without `wlopm` | `WAYLAND_DISPLAY` set |
-| `xset dpms force off` | X11 / i3 | `DISPLAY` set |
-| `vcgencmd display_power 0` | **legacy, not a Pi 5** | see below |
-
-**Only the first one physically darkens a panel.** The others cut the video
-signal and leave it to the display: a real monitor drops to standby and goes
-dark, but a cheap HDMI driver board may keep its LED backlight lit no matter
-what the Pi does, and nothing on the Pi can change that — cutting the panel's
-power is the only remedy. A DSI panel has no such ambiguity, which is why
-`bl_power` is tried first.
-
-**`vcgencmd display_power` does not work on a Pi 5.** The firmware refuses it
-whenever `vc4-kms-v3d` is in use, which is always on a Pi 5, so it is kept
-only for older boards. The agent warns if it ever falls back to it there.
-
-**On Pi OS Lite, `/sys/class/backlight/` can be empty**, which is what sends
-the agent down to a weaker method. Populate it:
+**Install what your session needs.** On labwc (the default here):
 
 ```bash
-ls /sys/class/backlight/            # empty?
-echo 'dtoverlay=rpi-backlight' | sudo tee -a /boot/firmware/config.txt
-sudo reboot
+sudo apt install -y wlr-randr
 ```
 
-The directory name varies (`rpi_backlight`, `4-0045`, `10-0045` — it depends
-on which DSI port the panel is on). The agent globs, so any of them works.
+The agent picks a method at startup: a writable `/sys/class/backlight/*/bl_power`
+if one exists (DSI panels), otherwise `wlr-randr` under Wayland, otherwise
+`xset` under X11. A DSI panel's backlight file is the only one that switches
+the backlight directly; the other two power the output down, which on this
+Pi's HDMI panel is what makes it go dark.
 
-**Check which method actually darkens your screen:**
-
-```bash
-~/eevee_assistant/scripts/screen-agent.sh --test
-```
-
-It prints the method it picked, blanks the screen for five seconds, and puts
-it back. Watch the panel: if it stays lit, that method does not control this
-display's backlight and the list above says what to try next.
-
-**Backlight permissions.** The sysfs file is root-owned, so give your user
-write access once with a udev rule — otherwise the agent says so at startup
-and falls through to a method that may not darken the panel at all:
-
-```bash
-sudo tee /etc/udev/rules.d/90-backlight.rules >/dev/null <<'EOF'
-SUBSYSTEM=="backlight", ACTION=="add", \
-  RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power", \
-  RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power"
-EOF
-sudo usermod -aG video "$USER"
-sudo reboot
-```
-
-**Start it with the session**, so it inherits the display variables. Add it
-next to the kiosk launcher — in the labwc autostart:
+**Start it with the session**, so it inherits `WAYLAND_DISPLAY`. For labwc:
 
 ```bash
 echo '$HOME/eevee_assistant/scripts/screen-agent.sh 2>&1 | logger -t screen-agent &' \
@@ -890,28 +841,49 @@ echo '$HOME/eevee_assistant/scripts/screen-agent.sh 2>&1 | logger -t screen-agen
 or in `~/.config/i3/config`:
 
 ```
-exec --no-startup-id $HOME/eevee_assistant/scripts/screen-agent.sh
+exec --no-startup-id $HOME/eevee_assistant/scripts/screen-agent.sh 2>&1 | logger -t screen-agent
 ```
 
-**Check it:**
+`logger` puts its output in the journal, which is size-capped; a plain
+`>> /tmp/screen-agent.log` on a box that runs for months is a file nothing
+truncates. Read it with `journalctl -t screen-agent -f`.
+
+**Check it.** Restart the session and look for the method it chose:
 
 ```bash
-~/eevee_assistant/scripts/screen-agent.sh      # run in the foreground once
+sudo systemctl restart getty@tty1
+sleep 15 && journalctl -t screen-agent -n 5 --no-pager
 ```
 
-Piping it through `logger` puts its output in the journal, which is already
-size-capped — a plain `>> /tmp/screen-agent.log` on a box that runs for months
-is a file nothing ever truncates. Read it with
-`journalctl -t screen-agent -f`.
+You want a line like `using wlr-randr (HDMI-A-2)`.
 
-It prints the method it chose, then a line per change. A `401` means it is
-pointed at the backend instead of nginx — use `http://127.0.0.1:8080/api/screen`
-(the default), or set `SCREEN_AGENT_KEY`. If it reports no method at all, no
-sysfs backlight was found and neither compositor tool was on `PATH`; install
-`wlr-randr` (labwc) or `x11-xserver-utils` (i3).
+**Testing it by hand must happen inside the session.** Over SSH there is no
+`WAYLAND_DISPLAY`, so the agent refuses rather than picking something useless:
+
+```bash
+WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) \
+  ~/eevee_assistant/scripts/screen-agent.sh --test
+```
+
+That blanks the screen for five seconds and puts it back.
+
+**If the panel stays lit**, work out what it supports:
+
+```bash
+for c in /sys/class/drm/card*-*/status; do echo "$c = $(cat $c)"; done
+ls /sys/class/backlight/
+```
+
+A DSI panel with an empty `/sys/class/backlight/` needs
+`dtoverlay=rpi-backlight` in `/boot/firmware/config.txt`. On HDMI that
+directory is legitimately empty and the compositor method is the right one —
+but a cheap driver board may keep its backlight on with no signal, and then no
+software on the Pi can darken it; cutting the panel's power is the only
+remedy. (`uhubctl` is not that remedy: the Pi 5's USB ports are ganged, so it
+would cut the mic and speaker too.)
 
 Without the agent everything still works — the panel blacks out, the button
-and the voice commands still do something — the backlight just stays on.
+and the voice commands still do something — the display just stays on.
 
 ### 8.6 Reboot
 

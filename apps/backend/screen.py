@@ -1,24 +1,16 @@
 """Whether the panel's screen should be on.
 
-WHY THE BACKEND OWNS THIS
-    Three things turn the screen off -- the top-bar button, a voice command,
-    and the dashboard's own idle timer -- and one thing acts on it: a helper
-    running on the Pi itself, outside Docker, because the backlight is a host
-    device no container can reach. They all need one answer to "should the
-    screen be on right now", and this is it.
+Three things turn it off -- the top-bar button, a voice command, the idle
+timer -- and one acts on it: scripts/screen-agent.sh, running on the host
+because the display is a host device no container can reach. They need one
+answer to "should the screen be on", and this is it.
 
-WHY NOT JUST THE WEBSOCKET COMMAND
-    `events.publish_command("sleep_screen")` already existed and still fires:
-    it is what makes the dashboard black out instantly instead of up to a
-    second later. But a command is a thing that happened once -- a helper that
-    starts up, or reconnects, or missed it, has no way to ask "what is true
-    now". That is a state question, so it gets state. Same split as the
-    retained event versus the command in events.py.
+The WebSocket command in events.py still fires alongside, because it blanks
+the dashboard instantly while the agent polls. A command cannot be asked
+"what is true now", which is why this state exists as well.
 
-IN MEMORY, NOT PERSISTED
-    The screen is physically on when the Pi boots, so "on" is the only honest
-    starting point. Restoring "off" from disk would mean a reboot that leaves
-    the panel dark with no sign anything is running.
+In memory: the screen is physically on at boot, so "on" is the only honest
+starting point.
 """
 from __future__ import annotations
 
