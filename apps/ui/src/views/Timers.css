@@ -1,227 +1,210 @@
-/* ---------------------------------------------------------------------------
-   Timers app: dial on the left, running timers on the right.
+/* Timers. See Timers.tsx. */
 
-   The dial column is fixed-ish and the list takes the rest -- the setter is
-   always the same size and in the same place, which is what lets you dial a
-   duration without reading the screen first.
-   --------------------------------------------------------------------------- */
 .timers {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: clamp(var(--space-3), 1.6vw, var(--space-5));
+  gap: var(--space-3);
   min-height: 0;
   animation: view-in var(--dur-slow) var(--ease-out);
 }
 
 .timers__count {
-  display: grid;
-  place-items: center;
-  min-width: 44px;
-  height: 44px;
-  padding-inline: var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-dim);
-  color: var(--accent);
+  display: block;
+  min-width: 2.5rem;
+  padding: var(--space-1) var(--space-2);
   font-size: var(--text-lg);
-  font-weight: 650;
+  font-weight: 600;
+  text-align: center;
+  color: var(--accent);
+  text-shadow: var(--glow-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-sm);
 }
 
 .timers__body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(260px, 0.8fr) 1.2fr;
-  gap: clamp(var(--space-4), 2.4vw, var(--space-6));
+  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--space-3);
   min-height: 0;
 }
 
-/* ---- setter ---- */
-.timers__set {
+/* One column under 900px: the dial needs its width more than the list does. */
+@media (max-width: 900px) {
+  .timers__body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Setting pane
+   --------------------------------------------------------------------------- */
+
+.timers__set .pane__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  min-height: 0;
+  align-items: center;
+  gap: var(--space-4);
+  justify-content: center;
 }
 
 .timers__presets {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-2);
+  width: 100%;
 }
 
 .timers__preset {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
-  min-height: 52px;
-  border-radius: var(--radius);
+  gap: 1px;
+  min-height: var(--touch-min);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--text-dim);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  color: var(--text);
-  font-size: var(--text-base);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
   transition:
-    transform var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
 }
 
 .timers__preset-unit {
-  font-size: 0.62em;
-  font-weight: 500;
+  font-size: var(--text-xs);
   color: var(--text-faint);
 }
 
 .timers__preset:active {
-  transform: scale(0.94);
   background: var(--surface-3);
 }
 
-.timers__start {
-  min-height: var(--touch-min);
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: #fff;
-  font-size: var(--text-base);
-  font-weight: 680;
-  letter-spacing: 0.01em;
-  transition:
-    transform var(--dur-fast) var(--ease),
-    opacity var(--dur) var(--ease);
+/* The armed preset matches the dial: same red, same reasoning as the rail's
+   active window. */
+.timers__preset.is-armed {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+.timers__preset.is-armed .timers__preset-unit {
+  color: var(--accent);
 }
 
-.timers__start:active:not(:disabled) {
-  transform: scale(0.97);
+/* The one primary control in the view: filled red, black label. */
+.timers__start {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: calc(var(--touch-min) + 8px);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: #000;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--glow-soft);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+:root[data-theme='light'] .timers__start {
+  color: var(--surface-1);
+}
+
+.timers__start-prompt {
+  font-weight: 700;
+}
+
+.timers__start:active {
+  background: var(--accent-bright);
 }
 
 .timers__start:disabled {
-  opacity: 0.3;
-  background: var(--surface-3);
   color: var(--text-faint);
+  background: var(--surface-2);
+  border-color: var(--border);
+  box-shadow: none;
 }
 
-/* ---- running list ---- */
-.timers__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-height: 0;
+/* ---------------------------------------------------------------------------
+   Running list
+   --------------------------------------------------------------------------- */
+
+.timers__list .pane__body {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
-
-.timers__list::-webkit-scrollbar {
+.timers__list .pane__body::-webkit-scrollbar {
   display: none;
 }
 
 .timers__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  flex: 1;
-  min-height: 160px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-4);
   text-align: center;
-  animation: fade-in var(--dur-slow) var(--ease);
 }
 
 .timers__empty-title {
-  font-size: var(--text-lg);
-  font-weight: 620;
-  color: var(--text-dim);
+  font-size: var(--text-base);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .timers__empty-hint {
+  margin-top: var(--space-2);
+  font-family: var(--font-head);
   font-size: var(--text-sm);
   color: var(--text-faint);
-  max-width: 28ch;
 }
 
-/* ---- one timer ---- */
+/* ---------------------------------------------------------------------------
+   Timer card
+   --------------------------------------------------------------------------- */
+
 .tcard {
-  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  flex: 0 0 auto;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  animation: pop var(--dur-slow) var(--ease-out) backwards;
-  animation-delay: calc(var(--i) * 60ms);
-  transition:
-    border-color var(--dur) var(--ease),
-    background-color var(--dur) var(--ease),
-    opacity var(--dur) var(--ease);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  animation: log-in var(--dur) var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 45ms);
+  transition: background-color var(--dur) var(--ease);
 }
 
-.tcard.is-ringing {
-  border-color: var(--accent);
-  background: var(--accent-wash);
-}
-
-/* Dimmed, because a paused timer is not going to happen. The list already
-   sorts it below the running ones (timers.active on the backend). */
-.tcard.is-paused {
-  opacity: 0.62;
-}
-
-.tcard__halo {
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  border: 2px solid var(--accent);
-  animation: pulse 1.2s var(--ease) infinite;
-  pointer-events: none;
-}
-
-.tcard__ring {
-  flex: 0 0 auto;
-  width: 54px;
-  height: 54px;
-  /* Twelve o'clock start, same reasoning as the dial. */
-  transform: rotate(-90deg);
-}
-
-.tcard__ring-track,
-.tcard__ring-fill {
-  fill: none;
-  stroke-width: 3.5;
-  stroke-linecap: round;
-}
-
-.tcard__ring-track {
-  stroke: var(--surface-3);
-}
-
-.tcard__ring-fill {
-  stroke: var(--accent);
-  transition: stroke-dashoffset 220ms linear;
-}
-
-/* A paused ring is drawn in a neutral colour: the accent means "counting". */
-.tcard.is-paused .tcard__ring-fill {
-  stroke: var(--text-faint);
+.tcard:last-child {
+  border-bottom: none;
 }
 
 .tcard__main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-/* The largest number in the app, on purpose: it is what the room reads. */
 .tcard__remaining {
-  font-size: var(--text-2xl);
+  font-size: clamp(1.75rem, 3vw, 2.75rem);
   font-weight: 600;
-  line-height: 1.02;
-  letter-spacing: -0.03em;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
 .tcard__meta {
@@ -232,70 +215,45 @@
   text-overflow: ellipsis;
 }
 
+.tcard.is-paused .tcard__remaining {
+  color: var(--text-dim);
+}
+
+.tcard.is-urgent .tcard__remaining {
+  color: var(--accent);
+  text-shadow: var(--glow);
+}
+
+/* Ringing: the row itself goes red-washed. It is the only element on the page
+   that is asking for something. */
+.tcard.is-ringing {
+  background: var(--accent-wash);
+}
+
 .tcard__btn {
-  flex: 0 0 auto;
   display: grid;
   place-items: center;
   width: var(--touch-min);
   height: var(--touch-min);
-  border-radius: var(--radius-full);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  flex: none;
+  font-size: var(--text-lg);
   color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   transition:
-    transform var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
 }
 
-.tcard__btn svg {
-  width: 24px;
-  height: 24px;
-}
-
 .tcard__btn:active {
-  transform: scale(0.9);
-  background: var(--surface-3);
   color: var(--text);
-}
-
-.tcard__btn--cancel {
-  background: transparent;
-  border-color: transparent;
+  background: var(--surface-3);
 }
 
 .tcard__btn--cancel:active {
-  background: var(--surface-3);
-}
-
-/* Narrow panel: the dial and the list stack, and the page scrolls as one. */
-@media (max-width: 860px) {
-  .timers__body {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-    scrollbar-width: none;
-  }
-}
-
-@media (max-height: 620px) {
-  .timers__preset {
-    min-height: 44px;
-    font-size: var(--text-sm);
-  }
-
-  .timers__start {
-    min-height: 48px;
-  }
-
-  .tcard {
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .tcard__ring {
-    width: 44px;
-    height: 44px;
-  }
-
-  .tcard__remaining {
-    font-size: var(--text-xl);
-  }
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
 }

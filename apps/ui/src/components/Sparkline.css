@@ -13,7 +13,7 @@
 .spark__bar {
   flex: 1 1 0;
   min-width: 2px;
-  border-radius: 1px;
+  border-radius: 0;
   transform-origin: bottom center;
   animation: spark-grow var(--dur) var(--ease-out) backwards;
   transition: background-color var(--dur) var(--ease);

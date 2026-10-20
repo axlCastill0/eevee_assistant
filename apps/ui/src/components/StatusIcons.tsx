@@ -1,14 +1,15 @@
 /**
- * Static status icons in the top bar.
+ * Static status icons in the status line.
  *
  * Deliberately NOT countdowns. A ticking number up here would pull the eye
  * away from whatever page is open, every second, forever; the question these
- * answer is only "is something set?", and the Dashboard answers "how long".
+ * answer is only "is something set?", and the dashboard answers "how long".
  *
  * They are also not buttons. Tapping a status to navigate is a hidden
  * affordance on a panel whose navigation is a permanent rail two inches to
  * the left.
  */
+import { Icon } from './Term'
 import './StatusIcons.css'
 
 export function StatusIcons({
@@ -28,11 +29,7 @@ export function StatusIcons({
           title={`${timerCount} timer${timerCount === 1 ? '' : 's'} running`}
           aria-label={`${timerCount} timer${timerCount === 1 ? '' : 's'} running`}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-               strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <circle cx="12" cy="13" r="8" />
-            <path d="M12 9v4l2.5 2M9 2h6" />
-          </svg>
+          <Icon name="timer" />
           {/* The count only appears when it is ambiguous. One timer needs no
               number; three do. */}
           {timerCount > 1 && <span className="statusicons__count num">{timerCount}</span>}
@@ -45,11 +42,7 @@ export function StatusIcons({
           title="An alarm is set for the next 24 hours"
           aria-label="An alarm is set for the next 24 hours"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-               strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M18 8.5a6 6 0 1 0-12 0c0 6-2 7.5-2 7.5h16s-2-1.5-2-7.5Z" />
-            <path d="M10.5 19.5a2 2 0 0 0 3 0" />
-          </svg>
+          <Icon name="bell" />
         </span>
       )}
     </div>

@@ -1,190 +1,94 @@
-.tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  /* Generous padding and a tall minimum: this is a finger target, not a row
-     in a table. */
-  min-height: 210px;
-  padding: var(--space-5);
-  text-align: left;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
-  overflow: hidden;
+/* A service, as a log row. See ServiceTile.tsx. */
 
-  animation: rise var(--dur-slow) var(--ease-out) backwards;
-  animation-delay: calc(var(--i) * 60ms);
-
-  transition:
-    transform var(--dur-fast) var(--ease),
-    border-color var(--dur) var(--ease),
-    background-color var(--dur-theme) var(--ease);
-}
-
-/* Press feedback. The only interaction affordance available on touch. */
-.tile:active {
-  transform: scale(0.985);
-  border-color: var(--border-strong);
-}
-
-.tile--down {
-  border-color: color-mix(in srgb, var(--down) 35%, var(--border));
-  background:
-    linear-gradient(160deg, var(--down-wash), transparent 55%),
-    var(--surface-1);
-}
-
-/* ---- head ---- */
-.tile__head {
-  display: flex;
+.srow {
+  display: grid;
+  grid-template-columns:
+    auto minmax(80px, 0.8fr) minmax(0, 1.7fr)
+    64px 72px auto auto;
   align-items: center;
   gap: var(--space-3);
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  animation: log-in var(--dur) var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 45ms);
+  transition: background-color var(--dur-fast) var(--ease);
 }
 
-.tile__name {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.srow:last-child {
+  border-bottom: none;
 }
 
-.tile__chev {
-  width: 20px;
-  height: 20px;
-  margin-left: auto;
-  color: var(--text-faint);
-  transition: transform var(--dur) var(--ease), color var(--dur) var(--ease);
+.srow:active {
+  background: var(--surface-2);
 }
 
-.tile:active .tile__chev {
-  transform: translateX(3px);
-  color: var(--text-dim);
+/* A failing row is tinted across its whole width -- the one case where the
+   colour has to be visible before the eye reaches the verdict. */
+.srow.is-down {
+  background: var(--down-wash);
 }
 
-/* ---- body ---- */
-.tile__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.tile__state {
-  font-size: var(--text-xl);
-  font-weight: 640;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: var(--ok);
-  transition: color var(--dur) var(--ease);
-}
-
-.tile__state--down {
-  color: var(--down);
-}
-
-.tile__detail {
-  font-size: var(--text-sm);
-  color: var(--text-dim);
-}
-
-/* ---- metrics ---- */
-.tile__metrics {
-  display: flex;
-  gap: var(--space-6);
-  margin-top: auto;
-}
-
-.tile__metric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tile__metric-label {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.tile__metric-value {
+.srow__name {
+  font-family: var(--font-head);
   font-size: var(--text-base);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
-  transition: color var(--dur-theme) var(--ease);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ---- sparkline ---- */
-.tile__spark {
+.srow__detail {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.srow__spark {
+  height: 22px;
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
 }
 
-.tile__spark > .spark {
-  flex: 1;
+.srow__age {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  text-align: right;
 }
 
-.tile__spark-label {
-  flex: none;
-  font-size: var(--text-xs);
+.srow__meter {
+  line-height: 1;
+}
+
+.srow__chev {
+  font-size: var(--text-sm);
   color: var(--text-faint);
-  letter-spacing: 0.02em;
 }
 
-/* ---- heartbeat pressure ---- */
-.tile__pressure {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 2px;
-  background: var(--border);
-  transition: background-color var(--dur-theme) var(--ease);
-}
-
-.tile__pressure-fill {
-  display: block;
-  height: 100%;
-  background: var(--ok);
-  transform-origin: left center;
-  /* Matches the poll interval so the bar glides instead of stepping. */
-  transition: transform 3000ms linear, background-color var(--dur) var(--ease);
-  will-change: transform;
-}
-
-.tile__pressure-fill.is-warn {
-  background: var(--warn);
-}
-
-.tile--down .tile__pressure-fill {
-  background: var(--down);
-}
-
-/* Compact tiles on short panels. Everything stays — the tile just stops
-   reserving space it does not need. Touch targets are unaffected: the tile is
-   still far larger than the 56px floor. */
-@media (max-height: 700px) {
-  .tile {
-    min-height: 0;
-    gap: var(--space-3);
-    padding: var(--space-4);
+/* 1024-wide panel: the sparkline and the detail are the first things to go.
+   The verdict, the name and the age are the row. */
+@media (max-width: 1100px) {
+  .srow {
+    grid-template-columns: auto minmax(80px, 1fr) minmax(0, 1.4fr) 68px auto auto;
   }
-
-  .tile__state {
-    font-size: var(--text-lg);
-  }
-
-  /* "running" / "never checked in" is also shown in the detail sheet, and the
-     Healthy/Down word above already carries the state. */
-  .tile__detail {
+  .srow__spark {
     display: none;
   }
+}
 
-  .tile__metrics {
-    gap: var(--space-5);
+@media (max-width: 860px) {
+  .srow {
+    grid-template-columns: auto 1fr 68px auto;
   }
-
-  .tile__spark-label {
+  .srow__detail,
+  .srow__meter {
     display: none;
   }
 }

@@ -1,15 +1,18 @@
 /**
- * The systems view — what used to be the whole dashboard.
+ * Systems — the service report.
  *
- * Lifted out of App.tsx unchanged when the sidebar arrived: App owns the
- * chrome (top bar, sidebar, voice dialog, screen veil) and each view owns its
- * own content and nothing else.
+ * Laid out as a log rather than as a grid of cards (2026-10-19): the question
+ * this page answers is "is anything wrong", and a column of aligned verdicts
+ * answers it in one downward glance where a grid made the eye hunt. Each row
+ * is still the whole touch target, and tapping one opens the detail sheet.
  */
 import { ServiceTile } from '../components/ServiceTile'
 import { Overview } from '../components/Overview'
+import { Pane } from '../components/Term'
 import { agoLabel } from '../lib/format'
 import type { ServicesResponse } from '../lib/api'
 import type { Sample } from '../lib/useServices'
+import './Systems.css'
 
 export function Dashboard({
   data,
@@ -26,49 +29,64 @@ export function Dashboard({
   history: Record<string, Sample[]>
   onOpen: (name: string) => void
 }) {
+  const down = data?.services.filter((s) => !s.healthy).length ?? 0
+
   return (
-    <>
-      <main className="app__grid">
-        <Overview data={data} error={error} loading={loading} />
+    <main className="sys">
+      <header className="sys__head">
+        <span className="prompt" aria-hidden>
+          ❯
+        </span>
+        <h1 className="sys__title">Systems</h1>
+        <span className="caret" aria-hidden />
+      </header>
 
-        {data?.services.map((svc, i) => (
-          <ServiceTile
-            key={svc.name}
-            service={svc}
-            samples={history[svc.name] ?? []}
-            staleAfterS={data.stale_after_s}
-            index={i}
-            onOpen={() => onOpen(svc.name)}
-          />
-        ))}
+      <Overview data={data} error={error} loading={loading} />
 
-        {/* Placeholder so the grid reads as intentionally unfinished rather
-            than broken while there are only two services. Remove once the
-            row fills up. */}
-        {data && data.services.length < 3 && (
-          <div
-            className="placeholder themed"
-            style={{ '--i': data.services.length + 1 } as React.CSSProperties}
-          >
-            <span className="placeholder__plus" aria-hidden>
-              +
-            </span>
-            <span className="placeholder__text">More systems land here</span>
-          </div>
-        )}
-      </main>
+      <Pane
+        title="services"
+        icon="container"
+        focus={down > 0}
+        flush
+        meta={
+          data
+            ? `${data.services.length - down}/${data.services.length} up`
+            : loading
+              ? 'polling'
+              : '--'
+        }
+      >
+        <div className="sys__rows">
+          {data?.services.map((svc, i) => (
+            <ServiceTile
+              key={svc.name}
+              service={svc}
+              samples={history[svc.name] ?? []}
+              staleAfterS={data.stale_after_s}
+              index={i}
+              onOpen={() => onOpen(svc.name)}
+            />
+          ))}
 
-      <footer className="app__footer">
-        <span className="mono">eevee</span>
-        <span className="app__footer-sep" aria-hidden />
-        <span className="mono">updated {agoLabel(updatedAt)}</span>
-        {data && (
-          <>
-            <span className="app__footer-sep" aria-hidden />
-            <span className="mono">stale after {data.stale_after_s}s</span>
-          </>
-        )}
+          {!data && (
+            <p className="sys__waiting mono">
+              {error ? 'no data: the backend is unreachable' : 'waiting for the first poll…'}
+            </p>
+          )}
+        </div>
+      </Pane>
+
+      <footer className="sys__footer mono">
+        <span>updated {agoLabel(updatedAt)}</span>
+        <span className="sys__footer-sep" aria-hidden>
+          │
+        </span>
+        <span>stale after {data?.stale_after_s ?? '--'}s</span>
+        <span className="sys__footer-sep" aria-hidden>
+          │
+        </span>
+        <span>eevee</span>
       </footer>
-    </>
+    </main>
   )
 }

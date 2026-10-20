@@ -13,7 +13,9 @@
 .dot__halo {
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-full);
+  /* Square, not round: every other mark on this panel is a block
+     character, and a lone circle looked borrowed from somewhere else. */
+  border-radius: 1px;
   background: var(--dot-color);
 }
 

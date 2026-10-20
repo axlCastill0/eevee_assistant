@@ -1,14 +1,23 @@
 import { clockTime, longDate } from '../lib/format'
+import type { Route } from '../lib/useRoute'
 import type { VoiceState } from '../lib/useVoiceEvents'
 import { PollRing } from './PollRing'
 import { StatusIcons } from './StatusIcons'
+import { Icon } from './Term'
 import { VoicePill } from './VoicePill'
 import './TopBar.css'
 
-/** A status strip, not a control strip -- the one exception is the screen-off
- *  button. The theme control lives on the Settings page. */
+/** The status line.
+ *
+ *  A status strip, not a control strip -- the one exception is the screen-off
+ *  button. The theme control lives on the Settings page.
+ *
+ *  Segments are separated by a literal │, as a multiplexer's status-right
+ *  would be. The prompt line under the clock says which window you are in,
+ *  which is the only place that information appears in words. */
 export function TopBar({
   now,
+  route,
   clockSynced,
   latencyMs,
   failures,
@@ -19,6 +28,7 @@ export function TopBar({
   onSleep,
 }: {
   now: Date
+  route: Route
   clockSynced: boolean
   latencyMs: number | null
   failures: number
@@ -33,58 +43,66 @@ export function TopBar({
   const { hm, seconds, meridiem } = clockTime(now)
 
   return (
-    <header className="topbar">
-      <div className="topbar__left">
-        <div className="topbar__clock">
-          <span className="topbar__time num">{hm}</span>
-          {/* Seconds are deliberately smaller and dimmer: they move constantly
-              and would otherwise pull the eye away from everything else. */}
-          <span className="topbar__seconds num">{seconds}</span>
-          {/* AM/PM is what makes 12-hour time unambiguous, so it has to be
-              present, but it changes twice a day and never needs attention. */}
-          <span className="topbar__meridiem">{meridiem}</span>
+    <header className="statusline themed">
+      <div className="statusline__left">
+        <div className="statusline__clock">
+          <span className="statusline__time num">{hm}</span>
+          {/* Seconds are smaller and dimmer: they move constantly and would
+              otherwise pull the eye away from everything else. */}
+          <span className="statusline__seconds num">{seconds}</span>
+          <span className="statusline__meridiem">{meridiem}</span>
         </div>
-        <div className="topbar__date">{clockSynced ? longDate(now) : 'waiting for clock sync'}</div>
+
+        <div className="statusline__prompt">
+          <span className="statusline__user">eevee@panel</span>
+          <span className="statusline__path">:~/{route}</span>
+          <span className="statusline__sep" aria-hidden>
+            │
+          </span>
+          <span className="statusline__date">
+            {clockSynced ? longDate(now) : 'waiting for clock sync'}
+          </span>
+        </div>
       </div>
 
-      <div className="topbar__right">
-        {/* First in the row on purpose: it is the only element here that
-            changes on a human timescale and needs to be found instantly. */}
+      <div className="statusline__right">
+        {/* First in the row on purpose: the only element here that changes on
+            a human timescale and needs to be found instantly. */}
         <VoicePill
           state={voice.state}
           transcript={voice.transcript}
           connected={voice.connected}
         />
 
-        {/* Connection readout. Latency in monospace is the small detail that
-            makes this feel like a dev tool rather than a consumer widget. */}
-        <div className="topbar__conn">
+        <span className="statusline__sep" aria-hidden>
+          │
+        </span>
+
+        <div className="statusline__conn">
           <PollRing active={!loading} stalled={failures > 0} />
-          <div className="topbar__conn-text">
-            <span className="topbar__conn-label">
-              {failures > 0 ? `retrying (${failures})` : 'live'}
-            </span>
-            <span className="topbar__conn-latency mono">
-              {latencyMs === null ? '--' : `${latencyMs}ms`}
-            </span>
-          </div>
+          <span className="statusline__conn-label">
+            {failures > 0 ? `retry ${failures}` : 'live'}
+          </span>
+          <span className="statusline__conn-latency num">
+            {latencyMs === null ? '--' : `${latencyMs}ms`}
+          </span>
         </div>
 
         <StatusIcons timerCount={timerCount} alarmSoon={alarmSoon} />
 
-        {/* Screen off. Last in the row: it is the only control here that
-            hides everything else. */}
+        <span className="statusline__sep" aria-hidden>
+          │
+        </span>
+
+        {/* Screen off. Last in the row: the only control here that hides
+            everything else. */}
         <button
           type="button"
-          className="topbar__sleep"
+          className="statusline__sleep"
           aria-label="Turn the screen off"
           onClick={onSleep}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-               strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M12 3v9" />
-            <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
-          </svg>
+          <Icon name="power" />
         </button>
       </div>
     </header>

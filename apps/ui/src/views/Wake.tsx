@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
+import { Icon, Verdict } from '../components/Term'
 import { fetchWake, sendWake, type WakeState } from '../lib/api'
 import './Wake.css'
 
@@ -122,11 +123,10 @@ export function Wake() {
 
       <section className={`wakecard themed is-${status}`} aria-label="Wake target">
         <div className="wakecard__head">
-          <span className="wakecard__dot" aria-hidden>
-            {(status === 'online' || status === 'waking') && (
-              <span className="wakecard__halo" aria-hidden />
-            )}
-          </span>
+          <Verdict
+            tone={status === 'online' ? 'ok' : status === 'offline' ? 'down' : 'idle'}
+            label={status === 'waking' ? 'WAIT' : undefined}
+          />
           <div className="wakecard__id">
             <h2 className="wakecard__name">
               {data?.configured ? data.name : 'Not configured'}
@@ -144,12 +144,8 @@ export function Wake() {
                to try. Disabling it here would hide the only remedy. */
             onClick={() => void wake()}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 3v9" />
-              <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
-            </svg>
-            <span>{waiting ? 'Send again' : 'Wake'}</span>
+            <Icon name="power" />
+            <span>{waiting ? 'send again' : 'wake'}</span>
           </button>
         ) : (
           <p className="wakecard__hint">

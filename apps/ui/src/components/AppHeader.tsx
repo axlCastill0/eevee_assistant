@@ -1,8 +1,8 @@
 /**
  * The header of an app opened from the launcher.
  *
- * WHY A BACK BUTTON AT ALL, WHEN THE SIDEBAR IS RIGHT THERE
- *   The sidebar's Dashboard entry does go home, but it is a 72px rail on the
+ * WHY A BACK BUTTON AT ALL, WHEN THE RAIL IS RIGHT THERE
+ *   The rail's Dashboard entry does go home, but it is a narrow strip on the
  *   far left and these apps are reached by tapping a card in the middle of
  *   the screen. A back control where the eye already is costs one tile of
  *   space and saves a cross-screen reach every time.
@@ -11,6 +11,7 @@
  *   `#/timers`, where there is no previous entry.
  */
 import { goHome } from '../lib/useRoute'
+import { Icon } from './Term'
 import './AppHeader.css'
 
 export function AppHeader({
@@ -32,15 +33,17 @@ export function AppHeader({
         aria-label="Back to the dashboard"
         onClick={goHome}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-             strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M14.5 5 8 12l6.5 7" />
-        </svg>
+        <Icon name="left" />
       </button>
 
       <div className="appheader__text">
-        <h1 className="appheader__title">{title}</h1>
-        {subtitle && <p className="appheader__subtitle">{subtitle}</p>}
+        <h1 className="appheader__title">
+          <span className="prompt" aria-hidden>
+            ❯{' '}
+          </span>
+          {title}
+        </h1>
+        {subtitle && <p className="appheader__subtitle mono">{subtitle}</p>}
       </div>
 
       {action && <div className="appheader__action">{action}</div>}

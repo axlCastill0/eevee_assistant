@@ -1,26 +1,36 @@
-/* Full-width bar pinned to the bottom, above everything including the music
-   view's full-bleed background. It must be reachable without first finding
-   the right page, so it is rendered by the shell and sits on top. */
+/* The ringing banner: a bottom alert bar, above every view. See
+   RingingBanner.tsx.
+
+   It is the loudest thing on the panel and the only element allowed to fill
+   with the accent, because it is the only one that interrupts. */
+
 .ringing {
   position: fixed;
-  z-index: 60;
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 60;
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-4) clamp(var(--space-4), 3vw, var(--space-6));
+  padding: var(--space-4) var(--space-5);
   background: var(--accent);
-  color: #fff;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.35);
-  animation: slide-up var(--dur) var(--ease-out);
+  color: #000;
+  border-top: 1px solid var(--accent-bright);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
+  animation: slide-up var(--dur-slow) var(--ease-out);
 }
 
-/* An alarm is a commitment made in advance; a timer is one made a minute ago.
-   Different colours so a glance from across the room tells them apart. */
+:root[data-theme='light'] .ringing {
+  color: var(--surface-1);
+}
+
+/* An alarm is amber rather than red: a timer you set two minutes ago and an
+   alarm that fires at seven are different kinds of interruption, and the
+   colour is the fastest way to tell which one woke you. */
 .ringing--alarm {
   background: var(--warn);
+  border-top-color: var(--warn);
   color: #1a1203;
 }
 
@@ -30,42 +40,56 @@
 }
 
 .ringing__title {
-  font-size: var(--text-lg);
-  font-weight: 650;
-  line-height: 1.2;
+  font-family: var(--font-head);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .ringing__detail {
-  font-size: var(--text-sm);
-  opacity: 0.86;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  opacity: 0.78;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Buttons sit on a filled bar, so they are outlined in the bar's own
+   foreground rather than in a token colour. */
 .ringing__btn {
-  flex: 0 0 auto;
-  min-width: 128px;
-  min-height: var(--touch-min);
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-full);
+  flex: none;
+  min-width: 7rem;
+  min-height: calc(var(--touch-min) + 4px);
+  font-family: var(--font-mono);
   font-size: var(--text-base);
-  font-weight: 650;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  transition: transform var(--dur-fast) var(--ease);
-}
-
-/* Stop is the one you reach for half asleep: solid, and the widest target
-   on the bar. */
-.ringing__btn--stop {
-  min-width: 164px;
-  color: #15181d;
-  background: #fff;
-  border-color: transparent;
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: currentColor;
+  background: rgba(0, 0, 0, 0.14);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
 }
 
 .ringing__btn:active {
-  transform: scale(0.96);
+  background: rgba(0, 0, 0, 0.26);
+}
+
+/* Stop is the primary action: inverted, so it is unmistakable on a bar
+   someone is reading at 7am. */
+.ringing__btn--stop {
+  color: var(--accent);
+  background: #fff;
+  border-color: #fff;
+}
+
+.ringing--alarm .ringing__btn--stop {
+  color: #1a1203;
+}
+
+.ringing__btn--stop:active {
+  background: rgba(255, 255, 255, 0.82);
 }

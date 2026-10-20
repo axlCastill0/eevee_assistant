@@ -27,6 +27,7 @@
 import { useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { Drum, type DrumItem } from '../components/Drum'
+import { Pane, Rule } from '../components/Term'
 import { updateAlarm, type AlarmEntry } from '../lib/api'
 import { duration } from '../lib/format'
 import './Alarms.css'
@@ -136,6 +137,8 @@ export function Alarms({
         }
       />
 
+      <Rule label="week" icon="calendar" />
+
       {/* The week. Navigation and overview in one strip: every day's time is
           legible without selecting it. */}
       <div className="week" role="tablist" aria-label="Day">
@@ -159,24 +162,29 @@ export function Alarms({
       </div>
 
       {selected && (
-        <section
+        <Pane
           /* Keyed on the day, so switching days replays the entrance
              animation -- which is the cue that the editor below now refers to
              a different slot. */
           key={selected.weekday}
-          className="editor themed"
-          aria-label={`${selected.day} alarm`}
+          title={selected.day}
+          icon="bell"
+          focus={selected.enabled}
+          className="editor"
+          meta={
+            selected.enabled
+              ? selected.next_fire_in_s !== null
+                ? `rings in ${duration(selected.next_fire_in_s)}`
+                : 'on'
+              : 'off'
+          }
         >
           <div className="editor__head">
-            <div>
-              <h2 className="editor__day">{selected.day}</h2>
-              <p className="editor__state">
-                {selected.enabled
-                  ? selected.next_fire_in_s !== null
-                    ? `rings in ${duration(selected.next_fire_in_s)}`
-                    : 'on'
-                  : 'off'}
-              </p>
+            <div className="editor__state">
+              <span className="editor__state-label">
+                {selected.enabled ? 'enabled' : 'disabled'}
+              </span>
+              <span className="editor__state-time num">{selected.label}</span>
             </div>
 
             {/* A switch, not a checkbox: the control most likely to be hit
@@ -234,7 +242,7 @@ export function Alarms({
               ))}
             </div>
           </div>
-        </section>
+        </Pane>
       )}
     </main>
   )

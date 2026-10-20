@@ -1,244 +1,258 @@
-/* ---------------------------------------------------------------------------
-   Home: the launcher.
+/* The launcher. See Home.tsx. */
 
-   Glance strip on top, app grid under it. Both are auto-fit grids rather than
-   fixed columns -- cards come and go as state changes, and a layout with a
-   hole in it where the alarm card used to be is worse than one that reflows.
-   --------------------------------------------------------------------------- */
 .home {
   position: relative;
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: clamp(var(--space-4), 2vw, var(--space-6));
+  gap: var(--space-3);
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   animation: view-in var(--dur-slow) var(--ease-out);
+  scrollbar-width: none;
+}
+.home::-webkit-scrollbar {
+  display: none;
 }
 
-/* ---- atmosphere ---- */
-
-/* Two blobs drifting behind the content. The only decoration on the panel,
-   and it is here because the launcher is the screen you walk past: a
-   completely static home screen reads as a frozen one.
-
-   `filter: blur()` is paid ONCE at paint, and the animation is a transform on
-   the already-blurred layer, so the Pi composites it rather than re-blurring
-   every frame. Verify any change to this on the device. */
-.home__aura {
+/* Dot matrix. Static background-image, one paint, no element to composite. */
+.home__matrix {
   position: absolute;
-  inset: -10%;
+  inset: -20%;
   z-index: 0;
-  overflow: hidden;
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 0.5;
+  background-image: radial-gradient(
+    circle at center,
+    var(--border) 0.5px,
+    transparent 0.5px
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 0%, transparent 75%);
 }
 
-.home__blob {
-  position: absolute;
-  width: 46%;
-  aspect-ratio: 1;
-  border-radius: var(--radius-full);
-  filter: blur(70px);
-  will-change: transform;
-}
-
-.home__blob--a {
-  top: -12%;
-  left: -6%;
-  background: var(--accent);
-  opacity: 0.16;
-  animation: drift 38s var(--ease) infinite;
-}
-
-.home__blob--b {
-  right: -10%;
-  bottom: -18%;
-  background: var(--info);
-  opacity: 0.13;
-  /* Opposite phase, different period: the two never line up into a pulse. */
-  animation: drift 52s var(--ease) infinite reverse;
-}
-
-[data-theme='light'] .home__aura {
-  /* The same opacity over white reads as a stain rather than a glow. */
-  opacity: 0.4;
-}
-
-/* ---- glance strip ---- */
-.home__glance {
+.home > *:not(.home__matrix) {
   position: relative;
   z-index: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Heading
+   --------------------------------------------------------------------------- */
+
+.home__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.home__prompt {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* The one typed reveal on the page. clip-path with steps() paints the heading
+   at 14 discrete widths instead of 60 times a second. */
+.home__title {
+  font-family: var(--font-head);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  animation: type-in 360ms steps(14, end);
+}
+
+/* ---------------------------------------------------------------------------
+   Glance cards
+   --------------------------------------------------------------------------- */
+
+.home__glance {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: clamp(var(--space-2), 1.2vw, var(--space-4));
+  grid-template-columns: repeat(auto-fill, minmax(clamp(190px, 20vw, 250px), 1fr));
+  gap: var(--space-3);
 }
 
 .glance {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-  padding: var(--space-3) var(--space-4);
-  min-height: 112px;
+  min-height: 132px;
   text-align: left;
-  border-radius: var(--radius-lg);
   background: var(--surface-1);
-  border: 1px solid var(--border);
-  /* Backdrop blur would be the obvious choice over the aura; it is a
-     per-frame GPU cost on a Pi, and an opaque surface over a blurred blob
-     looks the same at this size. */
-  animation: pop var(--dur-slow) var(--ease-out) backwards;
-  animation-delay: calc(var(--i) * 70ms);
+  border: 1px solid var(--frame);
+  border-radius: var(--radius);
+  overflow: hidden;
+  opacity: 0;
+  animation: pop var(--dur-slow) var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 55ms);
   transition:
-    transform var(--dur-fast) var(--ease),
-    border-color var(--dur) var(--ease),
-    background-color var(--dur-theme) var(--ease);
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
-/* Only the cards that lead somewhere press. `is-quiet` is the weather card
-   with nothing to say and no destination. */
-button.glance:active {
-  transform: scale(0.97);
+.glance:active {
   background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 
-.glance--accent {
-  border-color: var(--accent-dim);
-  background: var(--accent-wash);
+/* The title bar, matching a pane's. */
+.glance__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
 
-.glance--info {
-  border-color: var(--info);
-  background: var(--info-wash);
+.glance__icon {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
 }
-
-.glance.is-quiet {
-  border-style: dashed;
+.glance__icon--weather {
+  font-size: var(--text-base);
+  color: var(--text-dim);
 }
 
 .glance__label {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  font-weight: 650;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.glance__fill {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  line-height: 1;
+  color: var(--border-strong);
+}
+
+.glance__meta {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------------------
+   Card body
+   --------------------------------------------------------------------------- */
+
+.glance__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.glance__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .glance__value {
-  font-size: var(--text-xl);
+  font-size: clamp(1.5rem, 2.4vw, 2.125rem);
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.05;
   letter-spacing: -0.02em;
+  color: var(--text);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-/* A track title is not a number: smaller, and it wraps to two lines rather
-   than being cut off after four words. */
+/* A title rather than a number: Lexend, smaller, and allowed to be clipped. */
 .glance__value.is-compact {
-  font-size: var(--text-base);
-  font-weight: 620;
+  font-family: var(--font-head);
+  font-size: var(--text-lg);
+  line-height: 1.2;
   white-space: normal;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .glance__unit {
   font-size: 0.5em;
   font-weight: 500;
   color: var(--text-dim);
-  margin-left: 1px;
+  margin-left: 0.1em;
 }
 
 .glance__detail {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--text-dim);
+  color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.glance__glyph {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  width: 34px;
-  height: 34px;
-  color: var(--text-dim);
-}
-
-.glance__glyph svg {
-  width: 100%;
-  height: 100%;
-}
-
 .glance__art {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
+  width: 56px;
+  height: 56px;
+  flex: none;
   object-fit: cover;
-  box-shadow: var(--shadow-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
 }
 
-/* Elapsed fraction, as a hairline across the foot of the card. scaleX so it
-   animates on the compositor; transform-origin left so it grows rightward. */
-.glance__progress {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: var(--accent);
-  transform: scaleX(var(--p));
-  transform-origin: left center;
-  transition: transform 1s linear;
+.glance__meter {
+  padding: 0 var(--space-3) var(--space-3);
+  line-height: 1;
 }
 
-/* The halo for a timer at or near zero. A separate element, scaled and faded,
-   so nothing animates a shadow. */
-.glance__halo {
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  border: 2px solid var(--accent);
-  animation: pulse 1.4s var(--ease) infinite;
-  pointer-events: none;
+/* Tones. Only the value is tinted -- the frame stays neutral so the strip
+   does not become a row of coloured boxes. */
+.glance--accent .glance__value {
+  color: var(--accent);
+  text-shadow: var(--glow-soft);
+}
+.glance--accent .glance__icon {
+  color: var(--accent);
+}
+.glance--info .glance__icon {
+  color: var(--info);
 }
 
-/* ---- app grid ---- */
+/* About to fire. The frame reddens, which is the only time a glance card
+   claims the eye. */
+.glance.is-urgent {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-wash);
+}
+.glance.is-urgent .glance__value {
+  color: var(--accent);
+  text-shadow: var(--glow);
+}
+
+.glance.is-quiet .glance__value {
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------------------
+   App grid
+   --------------------------------------------------------------------------- */
+
 .home__apps {
-  position: relative;
-  z-index: 1;
-  flex: 1;
   display: grid;
-  /* The grid now holds only the apps WITHOUT a sidebar entry, so there are a
-     handful rather than five. A wide floor keeps them big: three across on a
-     1024-wide panel, and the row stretches to fill the height left by the
-     glance strip. */
-  grid-template-columns: repeat(auto-fit, minmax(clamp(220px, 26vw, 300px), 1fr));
-  /* Capped, and the rows centred in whatever height is left. With only the
-     apps that have no sidebar entry there is one row, and a stretching row
-     made each tile 300px of mostly nothing. Add enough apps to wrap to two
-     rows and this fills the panel on its own. */
-  grid-auto-rows: minmax(118px, 200px);
-  align-content: center;
-  gap: clamp(var(--space-2), 1.4vw, var(--space-4));
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.home__apps::-webkit-scrollbar {
-  display: none;
+  grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 16vw, 200px), 1fr));
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
 }
 
 .apptile {
@@ -246,89 +260,76 @@ button.glance:active {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-end;
-  gap: 2px;
-  overflow: hidden;
-  padding: var(--space-4);
-  min-height: var(--touch-min);
-  border-radius: var(--radius-lg);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
+  gap: var(--space-1);
+  min-height: 140px;
+  padding: var(--space-3);
   text-align: left;
-  animation: pop var(--dur-slow) var(--ease-out) backwards;
-  /* Offset past the glance strip's stagger so the page fills top to bottom
-     in one sweep rather than two overlapping ones. */
-  animation-delay: calc(240ms + var(--i) * 60ms);
+  background: var(--surface-1);
+  border: 1px solid var(--frame);
+  border-radius: var(--radius);
+  opacity: 0;
+  animation: pop var(--dur-slow) var(--ease-out) forwards;
+  animation-delay: calc(180ms + var(--i) * 55ms);
   transition:
-    transform var(--dur-fast) var(--ease),
-    border-color var(--dur) var(--ease),
-    background-color var(--dur-theme) var(--ease);
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
 .apptile:active {
-  transform: scale(0.96);
   background: var(--surface-2);
+  border-color: var(--accent-dim);
 }
 
-.apptile.is-live {
-  border-color: var(--accent-dim);
+/* The command this tile stands for. It is the tile's label as a terminal
+   would write it, and it is why the grid does not need a heading on each
+   card. */
+.apptile__run {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+}
+
+.apptile__icon {
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  margin: auto 0 var(--space-1);
+  color: var(--text-dim);
 }
 
 .apptile.is-live .apptile__icon {
   color: var(--accent);
-}
-
-.apptile__icon {
-  margin-bottom: auto;
-  width: 30px;
-  height: 30px;
-  color: var(--text-dim);
-  transition: color var(--dur) var(--ease);
-}
-
-.apptile__icon svg {
-  width: 100%;
-  height: 100%;
+  text-shadow: var(--glow-soft);
 }
 
 .apptile__name {
+  font-family: var(--font-head);
   font-size: var(--text-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text);
 }
 
 .apptile__status {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-faint);
 }
 
-/* A 600px-tall panel shows the strip and one row of tiles. Shrink both
-   rather than scrolling: the launcher is the one screen that should never
-   need a scroll to show you what is on it. */
-@media (max-height: 620px) {
-  .glance {
-    min-height: 88px;
-    padding: var(--space-2) var(--space-3);
-  }
+.apptile.is-live .apptile__status {
+  color: var(--text-dim);
+}
 
-  .glance__value {
-    font-size: var(--text-lg);
-  }
-
-  .home__apps {
-    grid-auto-rows: minmax(96px, 150px);
-  }
-
-  .apptile {
-    padding: var(--space-3);
-  }
-
-  .apptile__icon {
-    width: 24px;
-    height: 24px;
-  }
-
-  .apptile__name {
-    font-size: var(--text-base);
-  }
+/* A live tile gets a red tick in its top-right corner: the same marker the
+   rail uses for the active window, so "something is happening here" looks
+   the same everywhere. */
+.apptile.is-live::after {
+  content: '';
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 1px;
+  box-shadow: var(--glow-soft);
 }

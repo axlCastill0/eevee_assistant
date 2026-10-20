@@ -48,6 +48,8 @@
      the row is what puts scrollTop at exactly index * item height, which is
      the arithmetic the component reads back. */
   scroll-snap-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-lg);
   font-weight: 600;
   color: var(--text-faint);
@@ -66,8 +68,8 @@
   top: var(--drum-item);
   height: var(--drum-item);
   border-radius: var(--radius-sm);
-  background: var(--surface-3);
-  border: 1px solid var(--border-strong);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-dim);
   pointer-events: none;
   /* Behind the digits, which are painted by the scroller above it. */
   z-index: -1;

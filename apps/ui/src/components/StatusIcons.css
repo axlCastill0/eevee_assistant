@@ -1,3 +1,5 @@
+/* Status glyphs in the status line. See StatusIcons.tsx. */
+
 .statusicons {
   display: flex;
   align-items: center;
@@ -7,33 +9,25 @@
 .statusicons__item {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  height: 44px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-full);
+  gap: 2px;
+  padding: 3px var(--space-2);
+  font-size: var(--text-base);
+  color: var(--text-dim);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  color: var(--text-dim);
-  animation: fade-in var(--dur) var(--ease);
-  transition:
-    background-color var(--dur-theme) var(--ease),
-    border-color var(--dur-theme) var(--ease);
-}
-
-.statusicons__item svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* The alarm reads warmer than the timer: one is a commitment made days ago,
-   the other was set a minute ago and is already on screen somewhere. */
-.statusicons__item--alarm {
-  color: var(--warn);
-  background: var(--warn-wash);
-  border-color: transparent;
+  border-radius: var(--radius-sm);
 }
 
 .statusicons__count {
   font-size: var(--text-xs);
   font-weight: 600;
+  color: var(--text);
+}
+
+/* An alarm within the day is the one status up here worth a colour: it is the
+   only one that will act on its own. */
+.statusicons__item--alarm {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  text-shadow: var(--glow-soft);
 }

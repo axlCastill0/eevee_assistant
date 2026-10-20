@@ -1,64 +1,56 @@
+/* An app's header. See AppHeader.tsx. */
+
 .appheader {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  flex: 0 0 auto;
-  animation: pop var(--dur) var(--ease-out);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
 }
 
 .appheader__back {
-  flex: 0 0 auto;
   display: grid;
   place-items: center;
   width: var(--touch-min);
   height: var(--touch-min);
-  border-radius: var(--radius-full);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  flex: none;
+  font-size: var(--text-lg);
   color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   transition:
-    transform var(--dur-fast) var(--ease),
-    background-color var(--dur-theme) var(--ease);
-}
-
-.appheader__back svg {
-  width: 26px;
-  height: 26px;
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
 .appheader__back:active {
-  transform: scale(0.9);
-  background: var(--surface-3);
-  color: var(--text);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
 }
 
 .appheader__text {
+  flex: 1;
   min-width: 0;
 }
 
 .appheader__title {
+  font-family: var(--font-head);
   font-size: var(--text-xl);
-  font-weight: 680;
+  font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 
 .appheader__subtitle {
   font-size: var(--text-xs);
+  letter-spacing: 0.02em;
   color: var(--text-faint);
 }
 
 .appheader__action {
-  margin-left: auto;
-}
-
-@media (max-height: 620px) {
-  .appheader__back {
-    width: 46px;
-    height: 46px;
-  }
-
-  .appheader__title {
-    font-size: var(--text-lg);
-  }
+  flex: none;
 }

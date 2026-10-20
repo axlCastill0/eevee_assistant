@@ -68,9 +68,51 @@ minutes and seconds are.
 
 ## 3. Design notes
 
-Target: modern developer tooling — Linear, Vercel, Raycast. Restrained neutral
-surfaces, one accent (red since 2026-10-16), hairline borders, monospace with tabular figures for
-every number, short decisive easing. Explicitly not a terminal or a sci-fi HUD.
+Target since 2026-10-19 (USER): **a terminal multiplexer, taken seriously.**
+Before that it was restrained developer-tooling chrome; the brief was to stop
+hedging and commit to the terminal, in red, without it becoming a hacker
+costume.
+
+What that means concretely:
+
+- **Every surface is a framed pane** with a bracketed title in its bar, the
+  way tmux labels a window. `Pane` in `components/Term.tsx`. At most one pane
+  per screen is `focus`ed, which reddens its frame and tick — more than one
+  and the marker means nothing.
+- **State is a bracketed verdict** — `[ OK ]`, `[FAIL]`, `[WARN]` — padded to
+  four characters so a column of them aligns. Colour is the second signal, not
+  the only one, which is also what makes the systems page readable to someone
+  who cannot tell the red from the green.
+- **Progress is drawn in block characters** (`████████░░░░`), not smooth bars.
+  `Meter` in `Term.tsx`. The exception is the music progress bar, which has to
+  move continuously and still scales a div.
+- **Dividers are real box-drawing characters**, clipped by `overflow: hidden`.
+  They join seamlessly in JetBrains Mono and cost one text run. Pane frames
+  stay CSS borders, which stay exactly 1px.
+- **Headings are prompts**: `❯ Dashboard` with a blinking block caret, typed in
+  on mount with `clip-path` + `steps()` so the reveal paints a dozen times
+  rather than sixty times a second.
+- **The rail is a window list.** Numbered `1 dash`, `2 music`, `3 sys`,
+  `0 cfg`; the active entry inverts its number and shows a red bar. Nothing on
+  this panel can type `1` — the number is what makes it read as a window list
+  rather than a phone's tab bar.
+- **The top bar is a status line**: segments divided by `│`, with an
+  `eevee@panel:~/<route>` prompt under the clock.
+- **Settings is a config file**, showing the real stored key
+  (`screen_timeout_min`) rather than a sentence, with dotted leaders out to the
+  control.
+- **A static scanline wash** over the whole shell at 2% (`--scanline`). One
+  repeating gradient, no animation, one paint.
+- **Corners are nearly square** (`--radius: 3px`) and red is allowed a *static*
+  glow (`--glow`), never an animated one.
+
+Light theme is a **paper terminal**, not an inversion: warm stock, ink text,
+a darker red, and no glow — bloom on paper reads as a printing fault.
+
+Typography is split by job: **Lexend** for headings and prose, **JetBrains
+Mono** for everything else including every number. Lexend has no `tnum`, so a
+clock set in it would shift its digits on a wall panel; mono is also simply
+what a terminal reads as.
 
 Scaled for touch:
 
@@ -109,14 +151,36 @@ These are enforced throughout and are the reason the UI looks the way it does:
 5. `prefers-reduced-motion` disables everything — also a one-line escape hatch
    if the Pi turns out slower than expected.
 
-Payload: 239 KB JS (74 KB gzip), 18 KB CSS (4 KB gzip), 89 KB fonts.
+Payload: 283 KB JS (88 KB gzip), 55 KB CSS (10 KB gzip), 95 KB fonts.
 
-Fonts are self-hosted and latin-subset only. The full `@fontsource` packages
-ship Cyrillic, Greek and Vietnamese — about 150 KB this panel would download
-and never render. They are declared by hand in `index.css` rather than
-imported, because the package has no per-subset entrypoint. Self-hosting
-matters because the Pi may boot before the network is up; a Google Fonts link
-would leave the dashboard in a fallback face.
+### Fonts
+
+Three faces, all self-hosted — the Pi may boot before the network is up, and a
+Google Fonts link would leave the panel in a fallback face. They are declared
+by hand in `index.css` rather than imported, so only the latin upright subsets
+ship.
+
+| Face | Source | Size |
+|---|---|---|
+| Lexend Variable | npm `@fontsource-variable/lexend` | 40 KB |
+| JetBrains Mono Variable | upstream release, subset by `apps/ui/scripts/fonts.py` | 43 KB |
+| Symbols Nerd Font | nerd-fonts release, subset to 91 glyphs by the same script | 12 KB |
+
+JetBrains Mono comes from the **upstream** release rather than the Google
+subset because the Google latin subset drops U+2500 box drawing, and the
+chrome is built out of box characters.
+
+Icons are Nerd Font glyphs, not SVG: one `@font-face` scoped to the private
+use area by `unicode-range` replaced every hand-drawn icon in the tree. Add one
+by putting its upstream glyph name in `SYMBOLS` in `scripts/fonts.py` and
+re-running it — the script resolves names to codepoints and regenerates
+`src/fonts/glyphs.ts`, because a hand-written PUA codepoint is unverifiable by
+eye and a wrong one is a blank box on the panel rather than an error anywhere.
+
+```bash
+# needs: pip install fonttools brotli
+python3 apps/ui/scripts/fonts.py ~/JetBrainsMono'[wght]'.ttf ~/SymbolsNerdFontMono-Regular.ttf
+```
 
 ---
 
@@ -127,24 +191,24 @@ icons) is global: it stays put when the view changes, because the clock and
 the pill are the two things that must be readable whatever page is up.
 
 ```
-┌────┬─────────────────────────────────────────────────┐
-│ ▌  │  8:41 ³⁷ PM  (● Ready) [live 9ms] [⏱2] [🔔]    │  TopBar
-│ ⏱  │  Sunday, October 4                              │
-│Dash│                                                 │
-│ ♪  │                                                 │
-│Mus │              the active view                    │
-│ ▪▪ │                                                 │
-│Sys │                                                 │
-│    │                                                 │
-│ ⚙  │                                                 │
-│Set │                                                 │
-└────┴─────────────────────────────────────────────────┘
+┌────┬──────────────────────────────────────────────────────┐
+│ ~$ │  8:41 ³⁷ PM            [■ READY] │ ◌ LIVE 9ms │ ⏱2 ⏻ │  status line
+│EEVEE  eevee@panel:~/dashboard │ Sunday, October 4         │
+│ 1  │                                                      │
+│dash│                                                      │
+│ 2  │                                                      │
+│mus │                the active view                       │
+│ 3  │                                                      │
+│sys │                                                      │
+│ 0  │                                                      │
+│cfg │                                                      │
+└────┴──────────────────────────────────────────────────────┘
   ▲
-  Sidebar — Dashboard, Music, Systems, then Settings pinned to the
-  bottom. 68px+ targets.
+  The window rail — dash, music, sys, then cfg pinned to the bottom.
+  78px targets, numbered like tmux windows.
 ```
 
-The top bar carries one control: a power button that blanks the screen. It is
+The status line carries one control: a power button that blanks the screen. It is
 last in the row because it is the only thing up there that hides everything
 else, and because a thumb reaching the corner should not pass over the status
 icons on the way. Everything else up there is **status, not control**. The theme toggle moved
@@ -155,7 +219,7 @@ a ticking number up there would pull the eye every second on every page, and
 tapping a status to navigate is a hidden affordance on a panel whose
 navigation is a permanent rail two inches to the left.
 
-The music view renders no top bar at all; see below.
+The music view renders no status line at all; see below.
 
 ### Routing
 
@@ -167,7 +231,7 @@ against the dev server.
 
 **The rail lists destinations, not routes.** `timers` and `alarms` are real
 routes — a kiosk reload has to come back to the app you were in — but they are
-reached from the launcher's tiles, not from the sidebar, which stays four
+reached from the launcher's tiles, not from the rail, which stays four
 entries. `HOME_APPS` is what keeps Dashboard lit while you are inside one; a
 rail with nothing highlighted reads as "you are nowhere".
 
@@ -203,7 +267,7 @@ something is playing. **Weather is the exception and is always there**: it is
 the one thing worth reading when nothing is happening, and a home screen that
 empties to nothing reads as broken.
 
-The grid holds **only apps that have no sidebar entry**. Music, Systems and
+The grid holds **only apps that have no rail entry**. Music, Systems and
 Settings are rail destinations; repeating them as tiles made the home screen
 a second copy of the navigation rather than a home for the things with
 nowhere else to live.
@@ -252,22 +316,28 @@ still wakes on touch, it is just not actually off.
 Touch input keeps working with the backlight off, which is what makes
 tap-to-wake possible at all.
 
-**Systems** — the original dashboard, unchanged:
+**Systems** — the service report. A log, not a grid, since 2026-10-19: the
+question this page answers is "is anything wrong", and a column of aligned
+verdicts answers it in one downward glance where a grid made the eye hunt.
 
 ```
-┌──────────────────────────────────────────────────────┐
-│ ▌ SYSTEM                                             │  Overview
-│   Everything good.                                   │  (backend's own
-│   2 services reporting healthy                       │   speech string)
-├─────────────┬─────────────┬──────────────────────────┤
-│ ● Backend  ›│ ● Voice    ›│                          │
-│ Healthy     │ Healthy     │          +               │  ServiceTile grid
-│ 0s   45s    │ 5s   45s    │  More systems land here  │
-│ ▁▁▃█████    │ ▁▃███▁██    │                          │
-├─────────────┴─────────────┴──────────────────────────┤
-│ eevee │ updated just now │ stale after 45s           │  footer
+❯ Systems ▌
+┌ ▌ SYSTEM ───────────────────── stale after 45s ──────┐
+│ [ OK ] Everything good.                              │  Overview
+│        2 services reporting healthy                  │  (backend's speech)
 └──────────────────────────────────────────────────────┘
+┌ ▌ SERVICES ──────────────────────────────── 2/2 up ──┐
+│ [ OK ]  Backend  heartbeat 0s   ▁▁▃█  0s   ███░░░  › │  one row per
+│ [FAIL]  Voice    never checked  ▃█▁▁  --  ██████   › │  service
+└──────────────────────────────────────────────────────┘
+updated just now │ stale after 45s │ eevee
 ```
+
+Each row is still the whole touch target and still opens the detail sheet. The
+block meter is heartbeat pressure: it fills as the last beat ages, so a
+service drifting towards stale shows it before it gets there. The row's
+columns drop in order under 1100px and 860px — the verdict, the name and the
+age are the row, everything else is detail.
 
 **Music** — Spotify now playing. Cover left, metadata and controls right, both
 boxes the same size, the pair centred in both axes:
@@ -288,8 +358,13 @@ boxes the same size, the pair centred in both axes:
 
 One custom property, `--np-size`, is both the cover's edge and the panel's
 width, so the halves cannot drift apart at any panel size. The background is
-the cover's two dominant colours as a gradient; see `lib/coverColors.ts`, and
+built from the cover's two dominant colours; see `lib/coverColors.ts`, and
 `docs/SPOTIFY.md` for the whole feature.
+
+This view keeps its own look — full bleed, cover colours, white type. It is a
+display surface rather than a pane, and the terminal chrome would only be in
+front of the art. The one concession is the corner radius, which now matches
+the rest of the app so the boundary at the rail is not jarring.
 
 Two details that follow this UI's existing rules rather than being new ideas:
 
@@ -520,8 +595,29 @@ promises something when `WOL_HOST` is set for the backend to probe. Named in
 `.env`, because there is no keyboard on this panel and a MAC address is set
 once. Full notes in `AGENT_CONTEXT.md` under `## wake on lan`.
 
-The cover art on the **Music** view drifts while a track is playing — three
-small transforms on 7s, 11s and 13s periods, so they only realign every
-seventeen minutes and the motion never reads as a loop. Pausing freezes it
-where it is rather than snapping back. All transform-only, like everything
-else that moves here.
+### Motion on the Music view
+
+Widened on 2026-10-19 (USER: more movement, and the background colours should
+move too). Everything below animates `transform` only, and every loop is
+**paused rather than removed** when playback stops, so the page freezes where
+it is and picks the same motion back up on play. One attribute does it:
+`data-playing` on `.np`.
+
+| Layer | Motion | Period |
+|---|---|---|
+| `.np__cover-float` | vertical bob, ±3.4% | 8s |
+| `.np__cover` | sway + perspective tilt, ±3° | 13s |
+| `.np__cover-img` | breathe, scale to 1.06 | 17s |
+| `.np__disc` | the record turning behind the art | 24s |
+| `.np__blob--a/b` | the two cover colours drifting across the frame | 34s / 27s |
+| `.np__sheen` | one conic sweep of both colours around everything | 90s |
+
+The three cover periods are co-prime enough to realign only every ~49 minutes,
+so the drift never reads as a loop. The record peeks ~7% past the cover's right
+edge, which reaches into the layout gap and never under the text, and it turns
+only while the track does — which makes "is this actually playing" readable
+from across the room.
+
+The soft edges are each layer's own radial fall-off. There is **no**
+`filter: blur()` anywhere: a translating or rotating layer is free once
+composited, where a blurred or animated gradient repaints every frame.

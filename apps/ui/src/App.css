@@ -1,9 +1,27 @@
-/* Shell: fixed-width sidebar, then the view. The padding moved to __main
-   when the sidebar arrived -- the rail has to reach both edges of the screen,
-   or it reads as a floating card rather than as chrome. */
+/* Shell: the window rail, then the pane area. The rail reaches both edges of
+   the screen -- a rail with a gutter around it reads as a floating card
+   rather than as chrome -- so all padding lives on __main. */
 .app {
+  position: relative;
   display: flex;
   height: 100%;
+  background: var(--bg);
+}
+
+/* The phosphor wash. One static repeating gradient over the whole shell at
+   2%: no animation, no filter, one paint. It sits above the content and below
+   the screen veil, because "off" out-ranks everything. */
+.app::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--scanline) 0 1px,
+    transparent 1px var(--scanline-period)
+  );
 }
 
 .app__main {
@@ -11,94 +29,19 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  /* Fluid gutter: tight on a 1024-wide panel, roomier on a 1920 one. */
-  padding: clamp(var(--space-4), 2.2vw, var(--space-6));
-  gap: clamp(var(--space-4), 2vw, var(--space-6));
+  padding: clamp(var(--space-3), 1.6vw, var(--space-5));
+  gap: clamp(var(--space-3), 1.4vw, var(--space-4));
 }
 
-/* The music view is full bleed: it runs to every edge of the pane, with only
-   the sidebar beside it. It renders no top bar, so there is nothing above it
-   to keep a gutter for. */
+/* The music view is full bleed: it runs to every edge of the pane area, with
+   only the rail beside it, and renders no status line. */
 .app__main:has(.np) {
   padding: 0;
   gap: 0;
 }
 
-/* Auto-fit grid: tiles reflow as services are added, with no breakpoint per
-   count. minmax floor is sized so two tiles fit on a 1024-wide panel and
-   three or four on a wider one. */
-.app__grid {
+/* Every view scrolls inside itself, never the shell. */
+.app__main > main {
   flex: 1;
-  display: grid;
-  animation: view-in var(--dur-slow) var(--ease-out);
-  grid-template-columns: repeat(auto-fit, minmax(clamp(260px, 28vw, 340px), 1fr));
-  grid-auto-rows: min-content;
-  gap: clamp(var(--space-3), 1.6vw, var(--space-5));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Hide the scrollbar: there is no mouse, and a visible bar on a kiosk
-     just looks unfinished. Scrolling still works by touch. */
-  scrollbar-width: none;
-}
-
-.app__grid::-webkit-scrollbar {
-  display: none;
-}
-
-/* ---- placeholder ---- */
-.placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-height: 210px;
-  color: var(--text-faint);
-  background: transparent;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-lg);
-
-  animation: rise var(--dur-slow) var(--ease-out) backwards;
-  animation-delay: calc(var(--i) * 60ms);
-}
-
-.placeholder__plus {
-  font-size: var(--text-xl);
-  font-weight: 300;
-  line-height: 1;
-}
-
-.placeholder__text {
-  font-size: var(--text-sm);
-}
-
-/* ---- footer ---- */
-.app__footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
-  font-size: var(--text-xs);
-  color: var(--text-faint);
-  transition: border-color var(--dur-theme) var(--ease);
-  animation: fade-in var(--dur-slow) var(--ease);
-}
-
-.app__footer-sep {
-  width: 1px;
-  height: 10px;
-  background: var(--border-strong);
-}
-
-@media (max-height: 700px) {
-  .app__main {
-    padding: var(--space-3) var(--space-4);
-    gap: var(--space-3);
-  }
-
-  .placeholder {
-    min-height: 0;
-    padding: var(--space-5) var(--space-4);
-  }
+  min-height: 0;
 }

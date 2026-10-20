@@ -85,8 +85,17 @@ export function NowPlaying({ active }: { active: boolean }) {
   const fraction = duration > 0 ? Math.min(1, Math.max(0, progressMs / duration)) : 0
 
   return (
-    <div className="np" data-fg={layers[front].foreground}>
-      {/* Both layers always rendered; only opacity changes. */}
+    <div
+      className="np"
+      data-fg={layers[front].foreground}
+      /* One attribute drives every loop on the page. Nothing is removed when
+         playback stops -- see the animation-play-state rules in the
+         stylesheet. */
+      data-playing={data?.is_playing ? 'yes' : 'no'}
+    >
+      {/* Both layers always rendered; only opacity changes. Each carries its
+          own moving parts, so a track change crossfades the motion along with
+          the colours instead of restarting it. */}
       {[0, 1].map((i) => (
         <div
           key={i}
@@ -98,18 +107,26 @@ export function NowPlaying({ active }: { active: boolean }) {
             } as React.CSSProperties
           }
           aria-hidden
-        />
+        >
+          <span className="np__blob np__blob--a" />
+          <span className="np__blob np__blob--b" />
+          <span className="np__sheen" />
+        </div>
       ))}
 
       {item ? (
         <div className="np__stage">
-          {/* The cover drifts while a track plays. Three transforms on three
-              nested elements with co-prime-ish periods (7s / 11s / 13s), so
-              they only realign every few minutes and the loop never reads as
-              a loop. Pausing does not REMOVE the animations -- it sets
+          {/* The cover drifts while a track plays: four transforms on four
+              nested elements with co-prime-ish periods, so they only realign
+              every several minutes and the loop never reads as a loop.
+              Pausing does not REMOVE the animations -- it sets
               `animation-play-state: paused`, so the art stops where it is
               instead of snapping back to square. */}
           <div className={`np__cover-float${data?.is_playing ? ' is-playing' : ''}`}>
+            {/* The record peeking out behind the art. It turns only while the
+                track does, which makes "is it actually playing" readable from
+                across the room without looking at the play button. */}
+            <div className="np__disc" aria-hidden />
             <div className="np__cover">
               {art ? (
                 /* key on the id so a track change remounts the <img> and the

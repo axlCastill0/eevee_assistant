@@ -134,6 +134,7 @@ export default function App() {
         {route !== 'music' && (
           <TopBar
             now={now}
+            route={route}
             clockSynced={clockSynced}
             latencyMs={latencyMs}
             failures={failures}

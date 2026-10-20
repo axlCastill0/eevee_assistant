@@ -1,9 +1,9 @@
 import type { ServicesResponse } from '../lib/api'
-import { StatusDot } from './StatusDot'
+import { Pane, Verdict } from './Term'
 import './Overview.css'
 
 /**
- * The headline tile: one sentence answering "is anything wrong".
+ * The headline pane: one sentence answering "is anything wrong".
  *
  * It reuses the backend's own `speech` string — the same text the voice
  * assistant says out loud. That is deliberate: the panel and the assistant
@@ -23,26 +23,24 @@ export function Overview({
   // dashboard must say so rather than showing stale green.
   if (error && !data) {
     return (
-      <section className="overview overview--down themed" style={{ '--i': 0 } as React.CSSProperties}>
-        <div className="overview__row">
-          <StatusDot tone="down" size={16} />
-          <span className="overview__eyebrow">System</span>
+      <Pane title="system" icon="pulse" focus meta="no response">
+        <div className="ov">
+          <Verdict tone="down" />
+          <h2 className="ov__headline">Backend unreachable</h2>
+          <p className="ov__sub mono">{error}</p>
         </div>
-        <h1 className="overview__headline">Backend unreachable</h1>
-        <p className="overview__sub mono">{error}</p>
-      </section>
+      </Pane>
     )
   }
 
   if (loading && !data) {
     return (
-      <section className="overview themed" style={{ '--i': 0 } as React.CSSProperties}>
-        <div className="overview__row">
-          <StatusDot tone="idle" size={16} pulse={false} />
-          <span className="overview__eyebrow">System</span>
+      <Pane title="system" icon="pulse" meta="polling">
+        <div className="ov">
+          <Verdict tone="idle" />
+          <h2 className="ov__headline is-muted">Connecting&hellip;</h2>
         </div>
-        <h1 className="overview__headline overview__headline--muted">Connecting&hellip;</h1>
-      </section>
+      </Pane>
     )
   }
 
@@ -52,33 +50,24 @@ export function Overview({
   const down = data.services.filter((s) => !s.healthy)
 
   return (
-    <section
-      className={`overview ${ok ? 'overview--ok' : 'overview--down'} themed`}
-      style={{ '--i': 0 } as React.CSSProperties}
+    <Pane
+      title="system"
+      icon="pulse"
+      focus={!ok}
+      /* Stale marker: data is on screen but the last poll failed. Showing it
+         is more honest than silently freezing. */
+      meta={error ? 'stale' : `stale after ${data.stale_after_s}s`}
     >
-      <div className="overview__row">
-        <StatusDot tone={ok ? 'ok' : 'down'} size={16} />
-        <span className="overview__eyebrow">System</span>
-        {/* Stale marker: data is on screen but the last poll failed. Showing
-            the age is more honest than silently freezing. */}
-        {error && <span className="overview__stale mono">stale &middot; {error}</span>}
+      <div className="ov">
+        <Verdict tone={ok ? 'ok' : 'down'} />
+        <h2 className="ov__headline">{data.speech}</h2>
+        <p className="ov__sub mono">
+          {ok
+            ? `${data.services.length} service${data.services.length === 1 ? '' : 's'} reporting healthy`
+            : `${down.length} of ${data.services.length} service${data.services.length === 1 ? '' : 's'} need attention`}
+          {error && ` · last poll failed: ${error}`}
+        </p>
       </div>
-
-      <h1 className="overview__headline">{data.speech}</h1>
-
-      <p className="overview__sub">
-        {ok ? (
-          <>
-            {data.services.length} service{data.services.length === 1 ? '' : 's'} reporting
-            healthy
-          </>
-        ) : (
-          <>
-            {down.length} of {data.services.length} service
-            {data.services.length === 1 ? '' : 's'} need attention
-          </>
-        )}
-      </p>
-    </section>
+    </Pane>
   )
 }

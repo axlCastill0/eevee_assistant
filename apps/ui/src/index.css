@@ -1,34 +1,45 @@
 /* ===========================================================================
    Eevee — design tokens and base styles
 
-   Aesthetic target: modern developer tooling. Restrained neutral surfaces,
-   one accent, monospace for anything numeric, tight radii, short easing.
-   Not a terminal, not a sci-fi HUD.
+   AESTHETIC: a terminal multiplexer, taken seriously.
 
-   Scaled for TOUCH on a ~10" panel: minimum target 56px, no hover-only
-   affordances, no cursor.
+   Every surface is a framed pane with a bracketed title in its top rule, the
+   way tmux labels a window. Values are monospace and column-aligned. State is
+   a bracketed verdict -- [ OK ], [FAIL] -- not a coloured blob, so the panel
+   is readable in one glance and still readable to someone who cannot tell the
+   red from the green. Progress is drawn with block characters, because this
+   UI owns a font that has them and a smooth bar would be the one rounded
+   thing on the screen.
 
-   Pi 5 performance rules enforced throughout:
-     - animate ONLY transform and opacity (compositor-only properties)
-     - no backdrop-filter anywhere (per-frame blur over a large area is the
-       single most expensive thing you can ask this GPU to do)
-     - no animated box-shadow or filter; static shadows only
+   Red is the only accent. It is a terminal red at full saturation, and it is
+   allowed a static glow -- never an animated one.
+
+   Lexend carries headings and big words; JetBrains Mono carries everything
+   else, including every number (Lexend has no tnum, and a clock that shifts
+   its digits on a wall panel is unacceptable).
+
+   Still a TOUCH panel: minimum target 56px, no hover-only affordances, no
+   cursor. ASCII chrome is decoration around finger-sized controls, never a
+   reason to make something small.
+
+   Pi 5 performance rules, unchanged and enforced throughout:
+     - animate ONLY transform and opacity
+     - no backdrop-filter anywhere
+     - no animated box-shadow or filter; static only
    =========================================================================== */
 
-/* Fonts are declared by hand rather than via the package's index.css, which
-   pulls in Cyrillic, Greek and Vietnamese subsets this panel will never
-   render — about 150 KB of woff2 the kiosk would ship and never use. Only the
-   latin upright variable faces are referenced here. No italics: nothing in
-   this UI is italic.
+/* Three faces, all self-hosted: the Pi can boot before the network is up.
 
-   Self-hosted on purpose. The Pi may boot before the network is up, and a
-   Google Fonts CDN link would leave the dashboard in a fallback face. */
+   Lexend comes from npm. The other two are built by scripts/fonts.py --
+   JetBrains Mono from the upstream release rather than the Google subset,
+   because the Google latin subset has no U+2500 box drawing and this whole UI
+   is drawn with box characters. */
 @font-face {
-  font-family: 'Inter Variable';
+  font-family: 'Lexend Variable';
   font-style: normal;
-  font-display: block; /* block, not swap: a reflow on a kiosk is worse than a beat of invisible text */
+  font-display: block; /* a reflow on a kiosk is worse than a beat of invisible text */
   font-weight: 100 900;
-  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')
+  src: url('@fontsource-variable/lexend/files/lexend-latin-wght-normal.woff2')
     format('woff2-variations');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
     U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
@@ -36,79 +47,89 @@
 }
 
 @font-face {
-  font-family: 'JetBrains Mono Variable';
+  font-family: 'JetBrains Mono';
   font-style: normal;
   font-display: block;
   font-weight: 100 800;
-  src: url('@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2')
-    format('woff2-variations');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  src: url('./fonts/jetbrains-mono.woff2') format('woff2-variations');
+}
+
+/* Icons. Scoped to the private use area by unicode-range, so it can sit in
+   every font stack without ever being asked to render a letter. */
+@font-face {
+  font-family: 'Symbols Nerd Font';
+  font-style: normal;
+  font-display: block;
+  font-weight: 400;
+  src: url('./fonts/symbols-nerd.woff2') format('woff2');
+  unicode-range: U+E000-F8FF;
 }
 
 /* ---------------------------------------------------------------------------
    Tokens — dark is the default, light overrides below.
-   Every color is a variable so the theme swap is one attribute change on
-   <html> and the CSS transition handles the crossfade.
    --------------------------------------------------------------------------- */
 :root {
   color-scheme: dark;
 
-  /* Surfaces, lowest to highest elevation */
-  --bg: #08090b;
-  --surface-1: #0e1014;
-  --surface-2: #14171c;
-  --surface-3: #1b1f26;
+  /* Surfaces. A terminal is nearly black and its panes are barely lighter;
+     the separation comes from the frames, not from elevation. */
+  --bg: #07080a;
+  --surface-1: #0b0d10;
+  --surface-2: #101318;
+  --surface-3: #161a21;
 
-  /* Hairlines. Dev tools lean on 1px borders rather than heavy shadows. */
-  --border: #21262e;
-  --border-strong: #2d343e;
+  /* Frames and rules. The 1px line is the primary structural element here,
+     which is why there are three weights of it. */
+  --border: #1c2027;
+  --border-strong: #2a3039;
+  --frame: #232932;
 
-  /* Text */
-  --text: #e8eaed;
-  --text-dim: #9aa3af;
-  --text-faint: #6b7280;
+  --text: #e6e8ec;
+  --text-dim: #959dab;
+  --text-faint: #5f6775;
 
-  /* Accent — a single hue, used for focus, active states and controls.
-     Red since 2026-10-16 (USER).
-
-     It shares a family with --down below. That is tolerable because nothing
-     relies on "is it red" alone to mean "is it broken": a down service is
-     always labelled in words, always carries a status dot, and is the only
-     one of the two that pulses -- the accent never animates. Where the two
-     WOULD have been read against each other, the element uses --info
-     instead; see the voice pill. */
+  /* Accent — the only hue with any saturation on the screen.
+     Red since 2026-10-16 (USER). */
   --accent: #ff3b3b;
-  --accent-dim: #a81f1f;
+  --accent-bright: #ff7272;
+  --accent-dim: #8c1c1c;
   --accent-wash: rgba(255, 59, 59, 0.12);
+  --accent-wash-strong: rgba(255, 59, 59, 0.2);
 
-  /* Calm, non-urgent blue. This WAS the accent until 2026-10-16; it stayed as
-     its own token because the voice pill's `ready` state used it and must not
-     follow the accent into red -- `speaking` is already red there, and the
-     panel's one rule about red is that it means "do not talk over this". */
+  /* The CRT bloom. STATIC -- it is a text-shadow on red text and a box-shadow
+     on red rules, and neither is ever animated. */
+  --glow: 0 0 14px rgba(255, 59, 59, 0.3);
+  --glow-soft: 0 0 10px rgba(255, 59, 59, 0.18);
+
+  /* Calm blue, for the one place red would mean the wrong thing: the voice
+     pill's `ready`. See VoicePill.css. */
   --info: #4c8dff;
   --info-wash: rgba(76, 141, 255, 0.1);
 
-  /* Status */
-  --ok: #3ecf8e;
-  --ok-wash: rgba(62, 207, 142, 0.1);
-  --warn: #f5a623;
-  --warn-wash: rgba(245, 166, 35, 0.1);
-  --down: #f6685e;
-  --down-wash: rgba(246, 104, 94, 0.1);
+  /* Status. Shares the red family with the accent on purpose -- nothing on
+     this panel relies on hue alone, because every state is also spelled out
+     in a bracketed verdict. */
+  --ok: #2fd47f;
+  --ok-wash: rgba(47, 212, 127, 0.1);
+  --warn: #ffb224;
+  --warn-wash: rgba(255, 178, 36, 0.1);
+  --down: #ff4d4d;
+  --down-wash: rgba(255, 77, 77, 0.1);
 
-  /* Shadows — static only, never animated. */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 10px 34px rgba(0, 0, 0, 0.55);
 
-  /* Type. Numbers use tabular figures everywhere so values do not jitter
-     as digits change. */
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  /* The scanline wash over the whole shell. One static repeating gradient at
+     2% -- enough to read as a phosphor screen from a metre away, faint enough
+     not to moiré with the panel's own pixel grid. */
+  --scanline: rgba(255, 255, 255, 0.022);
+  --scanline-period: 3px;
 
-  /* Fluid scale — the panel resolution is not known yet, so every size is a
-     clamp between a 1024x600 floor and a 1920x1200 ceiling. */
+  /* Type */
+  --font-head: 'Lexend Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Symbols Nerd Font', ui-monospace, monospace;
+  --font-icon: 'Symbols Nerd Font', 'JetBrains Mono', monospace;
+
   --text-xs: clamp(0.6875rem, 0.55vw + 0.5rem, 0.8125rem);
   --text-sm: clamp(0.8125rem, 0.6vw + 0.6rem, 0.9375rem);
   --text-base: clamp(0.9375rem, 0.7vw + 0.7rem, 1.0625rem);
@@ -125,60 +146,74 @@
   --space-6: 2rem;
   --space-7: 3rem;
 
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
+  /* Corners are nearly square. A terminal has none; 3px is the concession to
+     not looking like a 1990s screenshot. */
+  --radius-sm: 2px;
+  --radius: 3px;
+  --radius-lg: 4px;
   --radius-full: 999px;
 
-  /* Touch minimum. Apple says 44px; a finger on a wall panel at arm's length
-     wants more, so 56 is the floor and primary controls are larger. */
+  /* Touch minimum. 44px is Apple's number; a wall panel at arm's length wants
+     more, so 56 is the floor and primary controls are larger. */
   --touch-min: 56px;
+  /* Height of a row in any of the list views. */
+  --row-h: 68px;
 
-  /* Easing. Dev-tool motion is quick and decisive — no overshoot, no bounce. */
+  /* Tracking for the small uppercase mono labels that carry most of the
+     chrome. Mono at 11px needs the air. */
+  --track-label: 0.14em;
+  --track-wide: 0.22em;
+
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 140ms;
   --dur: 220ms;
   --dur-slow: 420ms;
-
-  /* How long the theme crossfade takes. Longer than a normal transition so
-     the day/night flip reads as intentional rather than a flicker. */
   --dur-theme: 600ms;
 }
 
-/* Light theme. Not an inversion — surfaces get warmer and the accent darkens
-   so it keeps contrast against a pale background. */
+/* Light theme — a paper terminal, not an inversion. Warm stock, ink text,
+   darker red so it still carries against it. No glow: bloom on paper reads as
+   a printing fault. */
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --bg: #f7f8f9;
-  --surface-1: #ffffff;
-  --surface-2: #fbfbfc;
-  --surface-3: #f2f3f5;
+  --bg: #f4f3ef;
+  --surface-1: #fbfaf7;
+  --surface-2: #f7f6f2;
+  --surface-3: #eceae4;
 
-  --border: #e3e5e9;
-  --border-strong: #cfd3da;
+  --border: #ddd9d0;
+  --border-strong: #c3bdb1;
+  --frame: #cfc9bd;
 
-  --text: #15181d;
-  --text-dim: #5c6471;
-  --text-faint: #8b93a1;
+  --text: #15171a;
+  --text-dim: #585e68;
+  --text-faint: #8b8f98;
 
-  --accent: #d32020;
-  --accent-dim: #f0a3a3;
-  --accent-wash: rgba(211, 32, 32, 0.09);
+  --accent: #c71f1f;
+  --accent-bright: #e03535;
+  --accent-dim: #e8b4b4;
+  --accent-wash: rgba(199, 31, 31, 0.08);
+  --accent-wash-strong: rgba(199, 31, 31, 0.16);
+
+  --glow: none;
+  --glow-soft: none;
 
   --info: #2563eb;
   --info-wash: rgba(37, 99, 235, 0.08);
 
-  --ok: #17946b;
-  --ok-wash: rgba(23, 148, 107, 0.09);
-  --warn: #b26a00;
-  --warn-wash: rgba(178, 106, 0, 0.09);
-  --down: #d93a2e;
-  --down-wash: rgba(217, 58, 46, 0.09);
+  --ok: #0f9960;
+  --ok-wash: rgba(15, 153, 96, 0.09);
+  --warn: #9a6400;
+  --warn-wash: rgba(154, 100, 0, 0.09);
+  --down: #c7271b;
+  --down-wash: rgba(199, 39, 27, 0.09);
 
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-2: 0 4px 16px rgba(16, 24, 40, 0.08);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.07);
+  --shadow-2: 0 10px 30px rgba(16, 24, 40, 0.12);
+
+  --scanline: rgba(0, 0, 0, 0.016);
 }
 
 /* ---------------------------------------------------------------------------
@@ -201,21 +236,22 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-sans);
+  /* Mono is the DEFAULT face. Headings opt into Lexend, not the reverse --
+     in a terminal, prose is the exception. */
+  font-family: var(--font-mono);
   font-size: var(--text-base);
+  font-weight: 400;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 
-  /* The theme crossfade. Only these two properties transition on body;
-     each component transitions its own colors. */
   transition:
     background-color var(--dur-theme) var(--ease),
     color var(--dur-theme) var(--ease);
 }
 
-/* Kiosk hygiene: no cursor, no text selection, no tap highlight, no
-   double-tap zoom delay, no overscroll rubber-banding. */
+/* Kiosk hygiene: no cursor, no selection, no tap highlight, no double-tap
+   zoom delay, no overscroll rubber-banding. */
 body {
   cursor: none;
   overflow: hidden;
@@ -226,7 +262,15 @@ body {
   touch-action: manipulation;
 }
 
-/* Numbers never jitter. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-head);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
 .mono,
 .num {
   font-family: var(--font-mono);
@@ -243,8 +287,6 @@ button {
   touch-action: manipulation;
 }
 
-/* Focus rings stay for the occasional plugged-in keyboard, but never show
-   on touch. :focus-visible handles that distinction for us. */
 :focus {
   outline: none;
 }
@@ -253,7 +295,6 @@ button {
   outline-offset: 2px;
 }
 
-/* Every surface shares the same theme crossfade so nothing lags behind. */
 .themed {
   transition:
     background-color var(--dur-theme) var(--ease),
@@ -262,18 +303,132 @@ button {
 }
 
 /* ---------------------------------------------------------------------------
-   Keyframes — all transform/opacity only
+   Terminal chrome primitives
+
+   Shared by every view, which is why they live here rather than in one
+   component's stylesheet.
    --------------------------------------------------------------------------- */
 
-/* Tile entrance. Driven by a per-tile --i index for the stagger. */
-@keyframes rise {
+/* An icon from the Nerd Font. Fixed box so a row of them aligns regardless of
+   which glyphs are in it. */
+.ico {
+  font-family: var(--font-icon);
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1;
+  display: inline-block;
+  text-align: center;
+  width: 1.15em;
+  flex: none;
+  /* The glyphs sit high on the mono baseline next to Lexend text. */
+  transform: translateY(0.055em);
+}
+
+/* A bracketed verdict: [ OK ], [FAIL], [WARN]. The brackets are literal
+   characters in the markup, so they copy, read aloud, and survive a theme
+   that cannot show colour. */
+.verdict {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  white-space: pre; /* the padding inside [ OK ] is significant */
+  color: var(--text-dim);
+}
+.verdict--ok {
+  color: var(--ok);
+}
+.verdict--warn {
+  color: var(--warn);
+}
+.verdict--down {
+  color: var(--down);
+  text-shadow: var(--glow-soft);
+}
+
+/* A prompt, used anywhere a heading wants to read as a typed command. */
+.prompt {
+  color: var(--accent);
+  text-shadow: var(--glow-soft);
+}
+
+/* The block caret. Steps, not a fade: a cursor does not dim. */
+.caret {
+  display: inline-block;
+  width: 0.52em;
+  height: 1.05em;
+  margin-left: 0.14em;
+  background: var(--accent);
+  box-shadow: var(--glow-soft);
+  vertical-align: -0.16em;
+  animation: blink 1.1s steps(1, end) infinite;
+}
+
+/* Dotted leader between a label and its value, as in a manpage table. The
+   rule is the element; both sides sit on top of it. */
+.leader {
+  flex: 1;
+  min-width: var(--space-4);
+  height: 1px;
+  margin: 0 var(--space-3);
+  background-image: linear-gradient(
+    to right,
+    var(--border-strong) 0 2px,
+    transparent 2px 5px
+  );
+  background-size: 5px 1px;
+  background-repeat: repeat-x;
+  align-self: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Keyframes — transform and opacity only, except where noted
+   --------------------------------------------------------------------------- */
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Typed reveal. clip-path with steps(): the element is painted at a fixed
+   number of discrete widths rather than 60 times a second, which is what
+   makes this affordable on a Pi -- and the stepping is also what makes it
+   look typed rather than wiped. */
+@keyframes type-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* A boot-log line arriving. Short and flat -- a log does not bounce. */
+@keyframes log-in {
   from {
     opacity: 0;
-    transform: translate3d(0, 14px, 0) scale(0.985);
+    transform: translate3d(-8px, 0, 0);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -286,8 +441,6 @@ button {
   }
 }
 
-/* Healthy status dot: a slow, calm breathe. The halo is a separate element
-   scaling up and fading out, so no filter or shadow animation is involved. */
 @keyframes halo {
   0% {
     opacity: 0.5;
@@ -300,8 +453,6 @@ button {
   }
 }
 
-/* Down status: faster, and it does not fade fully, so it reads as insistent
-   rather than decorative. */
 @keyframes halo-urgent {
   0% {
     opacity: 0.7;
@@ -314,29 +465,6 @@ button {
   }
 }
 
-/* Sparkline draw-in. stroke-dashoffset is not compositor-accelerated, but it
-   runs once on mount over a handful of short paths, not continuously. */
-@keyframes draw {
-  from {
-    stroke-dashoffset: var(--len);
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* Value change flash: a brief accent wash behind a number that just updated.
-   Cheap and very "dev tool". */
-@keyframes flash {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-/* The poll countdown ring sweeps once per interval. */
 @keyframes sweep {
   from {
     stroke-dashoffset: var(--circ);
@@ -366,14 +494,12 @@ button {
   }
 }
 
-/* View entrance. Every route animates in on mount -- App keys the view
-   wrapper on the route, so switching apps remounts and replays this. Slides
-   from the right because the sidebar is on the left: content arrives from
-   the direction it is not coming out of. */
+/* View entrance. Slides from the right because the rail is on the left:
+   content arrives from the direction it is not coming out of. */
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translate3d(18px, 0, 0);
+    transform: translate3d(14px, 0, 0);
   }
   to {
     opacity: 1;
@@ -381,12 +507,10 @@ button {
   }
 }
 
-/* Launcher tiles and glance cards. A scale-up from slightly small reads as
-   "this came toward you", which is what a springboard should feel like. */
 @keyframes pop {
   from {
     opacity: 0;
-    transform: translate3d(0, 10px, 0) scale(0.94);
+    transform: translate3d(0, 8px, 0) scale(0.97);
   }
   to {
     opacity: 1;
@@ -394,51 +518,6 @@ button {
   }
 }
 
-/* Insistent, for a countdown about to end or an alarm about to fire. Scales
-   a separate ring element, never a shadow or a filter. */
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0;
-    transform: scale(1.35);
-  }
-}
-
-/* The soft colour wash behind the launcher. Two blobs on opposite phases,
-   moving slowly; a Pi composites a translating layer for free, where it would
-   repaint an animated gradient every frame. */
-@keyframes drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  33% {
-    transform: translate3d(6%, -4%, 0) scale(1.12);
-  }
-  66% {
-    transform: translate3d(-5%, 5%, 0) scale(0.95);
-  }
-}
-
-/* A digit that just changed. Shorter than `flash` and it moves, so a
-   countdown reads as ticking rather than merely differing. */
-@keyframes tick-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, -40%, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-/* The dial's knob when a drag starts: grows under the finger so it is
-   visible past the fingertip. */
 @keyframes grab {
   from {
     transform: scale(1);
@@ -448,8 +527,12 @@ button {
   }
 }
 
-/* Respect the OS setting. Also a useful escape hatch if the Pi turns out to
-   be slower than expected: one media query disables everything. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

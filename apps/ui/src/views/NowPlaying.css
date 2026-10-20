@@ -20,17 +20,30 @@
   --np-gap: clamp(var(--space-5), 3.4vw, var(--space-7));
 }
 
-/* ---- background ---- */
+/* ---- background ----
+
+   A floor plus three moving layers, rather than one static gradient
+   (2026-10-19, USER: the colours should move).
+
+   The floor is the flat 135deg gradient: its last stop is dark, so a cover
+   with two light colours still leaves the white text something to sit on, and
+   that guarantee must not depend on where a blob happens to be. The colour
+   people actually see comes from the two blobs and the sheen drifting over
+   it.
+
+   PI RULES, UNBROKEN
+     Every moving layer here animates transform and nothing else, and the soft
+     edges come from each layer's own radial fall-off -- there is no
+     filter: blur() anywhere, which on this GPU is the single most expensive
+     thing you can put on screen. A translating or rotating layer is free once
+     composited; an animated gradient would repaint every frame. */
 .np__bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   opacity: 0;
-  /* 135deg so the fall-off runs towards the bottom right, under the controls.
-     The third stop is a flat dark floor: without it, a cover with two light
-     colours leaves white text with nothing to sit on. */
+  overflow: hidden;
   background:
-    radial-gradient(120% 120% at 15% 10%, var(--c-a) 0%, transparent 60%),
     linear-gradient(135deg, var(--c-a) 0%, var(--c-b) 55%, rgba(0, 0, 0, 0.55) 100%),
     var(--bg);
   transition: opacity var(--dur-slow) var(--ease);
@@ -38,6 +51,59 @@
 
 .np__bg.is-front {
   opacity: 1;
+}
+
+.np__blob {
+  position: absolute;
+  width: 95%;
+  height: 115%;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.np__blob--a {
+  top: -28%;
+  left: -18%;
+  background: radial-gradient(circle at 50% 50%, var(--c-a) 0%, transparent 62%);
+  opacity: 0.85;
+  animation: np-drift-a 34s var(--ease) infinite;
+}
+
+.np__blob--b {
+  bottom: -30%;
+  right: -20%;
+  background: radial-gradient(circle at 50% 50%, var(--c-b) 0%, transparent 62%);
+  opacity: 0.8;
+  animation: np-drift-b 27s var(--ease) infinite;
+}
+
+/* One slow sweep of both colours around the whole frame. 90 seconds is long
+   enough that it is never caught moving, only noticed as having moved. */
+.np__sheen {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 190%;
+  aspect-ratio: 1;
+  margin: -95% 0 0 -95%;
+  opacity: 0.2;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 18%,
+    var(--c-a) 34%,
+    transparent 48% 68%,
+    var(--c-b) 84%,
+    transparent 100%
+  );
+  animation: spin 90s linear infinite;
+  will-change: transform;
+}
+
+/* Paused, not removed: the page stops where it is when the music does, and
+   picks the same motion back up on play. */
+.np[data-playing='no'] .np__blob,
+.np[data-playing='no'] .np__sheen {
+  animation-play-state: paused;
 }
 
 /* ---- stage ---- */
@@ -56,22 +122,23 @@
    clip and shadow are never touched by the motion.
 
    WHY THREE ELEMENTS AND NOT ONE KEYFRAME
-     One animation loops visibly. Three, on 7s / 11s / 13s, only line up again
-     every ~17 minutes, so the movement reads as drift rather than as a cycle.
+     One animation loops visibly. Three, on 8s / 13s / 17s, only line up again
+     every ~49 minutes, so the movement reads as drift rather than as a cycle.
      All three are transform-only, which the Pi composites without repainting
      anything -- see the shadow note below for what NOT to animate here. */
 .np__cover-float {
+  position: relative;
   flex: 0 0 auto;
   /* Paused by default. The `is-playing` class only RESUMES these; it never
      adds or removes them, so stopping a track freezes the art where it is
      instead of snapping back to square. */
-  animation: cover-bob 7s var(--ease) infinite;
+  animation: cover-bob 8s var(--ease) infinite;
   animation-play-state: paused;
   will-change: transform;
 }
 
 .np__cover-float .np__cover {
-  animation: cover-sway 11s var(--ease) infinite;
+  animation: cover-sway 13s var(--ease) infinite;
   animation-play-state: paused;
 }
 
@@ -80,7 +147,7 @@
      the same element. Order matters only for the shorthand, not the result. */
   animation:
     fade-in var(--dur-slow) var(--ease),
-    cover-breathe 13s var(--ease) infinite;
+    cover-breathe 17s var(--ease) infinite;
   animation-play-state: running, paused;
 }
 
@@ -93,11 +160,48 @@
   animation-play-state: running, running;
 }
 
+/* The record. Pure CSS: a dark platter, a repeating-radial groove pattern and
+   a label at the spindle. It sits behind the art and reaches out past its
+   right edge, and it turns ONLY while the track does -- which is what makes
+   "is this actually playing" readable from across the room. */
+.np__disc {
+  position: absolute;
+  top: 50%;
+  /* It may only reach into the gap, never under the text: at 1024px the gap
+     is ~35px and this peek is ~27px. */
+  right: -7%;
+  z-index: -1;
+  width: 78%;
+  pointer-events: none;
+  aspect-ratio: 1;
+  /* `translate`, not a transform: the rotation owns the transform property
+     and the two must not fight. */
+  translate: 0 -50%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #e2e2e6 0 2.4%, #0c0d10 2.5% 4.4%, transparent 4.5%),
+    repeating-radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.05) 0 1px,
+      transparent 1px 4px
+    ),
+    radial-gradient(circle at 42% 38%, #2b2d34 0%, #0b0c0f 74%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  animation: spin 24s linear infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+
+.np__cover-float.is-playing .np__disc {
+  animation-play-state: running;
+}
+
 .np__cover {
   flex: 0 0 auto;
   width: var(--np-size);
   height: var(--np-size);
-  border-radius: clamp(var(--radius), 1.4vw, 22px);
+  /* Nearly square, like every other surface in the app. */
+  border-radius: clamp(2px, 0.5vw, 8px);
   overflow: hidden;
   background: rgba(0, 0, 0, 0.3);
   /* Static shadow, never animated -- a moving shadow on this GPU is the most
@@ -161,6 +265,7 @@
 
 .np__title {
   margin-top: var(--space-2);
+  font-family: var(--font-head);
   font-size: clamp(1.75rem, 3.1vw, 3rem);
   font-weight: 650;
   line-height: 1.08;
@@ -183,6 +288,7 @@
 
 .np__artist {
   margin-top: var(--space-3);
+  font-family: var(--font-head);
   font-size: clamp(1rem, 1.3vw, 1.375rem);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.82);
@@ -204,7 +310,7 @@
 .np__bar-track {
   position: relative;
   height: 6px;
-  border-radius: var(--radius-full);
+  border-radius: 1px;
   background: rgba(255, 255, 255, 0.18);
   overflow: hidden;
 }
@@ -248,7 +354,7 @@
   place-items: center;
   width: clamp(var(--touch-min), 7vw, 84px);
   height: clamp(var(--touch-min), 7vw, 84px);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -307,6 +413,7 @@
 }
 
 .np__empty-title {
+  font-family: var(--font-head);
   font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text);
@@ -324,7 +431,7 @@
   min-height: var(--touch-min);
   margin-top: var(--space-5);
   padding: 0 var(--space-6);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #fff;
   font-weight: 600;
@@ -343,7 +450,7 @@
   left: 50%;
   max-width: min(90%, 40rem);
   padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
   font-size: var(--text-sm);
@@ -358,7 +465,7 @@
   top: clamp(var(--space-3), 1.5vw, var(--space-5));
   right: clamp(var(--space-3), 1.5vw, var(--space-5));
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.45);
   color: rgba(255, 255, 255, 0.7);
   font-size: var(--text-xs);
@@ -397,20 +504,26 @@
 @keyframes cover-bob {
   0%,
   100% {
-    transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 1.4%, 0);
   }
   50% {
-    transform: translate3d(0, -1.6%, 0);
+    transform: translate3d(0, -3.4%, 0);
   }
 }
 
+/* The sway carries the perspective tilt as well, so the art reads as a plate
+   floating in front of the background rather than as a sliding rectangle.
+   3 degrees is the ceiling: past that the near edge starts to look soft on a
+   panel this size. */
 @keyframes cover-sway {
   0%,
   100% {
-    transform: rotate(-0.7deg) translate3d(-0.5%, 0, 0);
+    transform: perspective(1100px) rotateY(-3deg) rotateZ(-1.5deg)
+      translate3d(-1.2%, 0, 0);
   }
   50% {
-    transform: rotate(0.7deg) translate3d(0.5%, 0, 0);
+    transform: perspective(1100px) rotateY(3deg) rotateZ(1.5deg)
+      translate3d(1.2%, 0, 0);
   }
 }
 
@@ -420,6 +533,34 @@
     transform: scale(1);
   }
   50% {
-    transform: scale(1.035);
+    transform: scale(1.06);
+  }
+}
+
+/* The background blobs. Large, slow, and on opposite phases, so the two cover
+   colours trade places across the frame instead of pulsing together. */
+@keyframes np-drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(14%, 8%, 0) scale(1.18);
+  }
+  66% {
+    transform: translate3d(5%, -10%, 0) scale(0.94);
+  }
+}
+
+@keyframes np-drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  33% {
+    transform: translate3d(-12%, -9%, 0) scale(0.92);
+  }
+  66% {
+    transform: translate3d(-4%, 11%, 0) scale(1.2);
   }
 }

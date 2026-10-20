@@ -1,136 +1,148 @@
-.topbar {
+/* The status line. See TopBar.tsx. */
+
+.statusline {
+  flex: none;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-5);
-  padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--border);
-  transition: border-color var(--dur-theme) var(--ease);
-  animation: fade-in var(--dur-slow) var(--ease);
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-1);
+  border: 1px solid var(--frame);
+  border-radius: var(--radius);
 }
 
-.topbar__left {
+.statusline__left {
   display: flex;
   flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Clock
+   --------------------------------------------------------------------------- */
+
+.statusline__clock {
+  display: flex;
+  align-items: baseline;
   gap: var(--space-1);
 }
 
-.topbar__clock {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-.topbar__time {
-  font-size: var(--text-3xl);
-  font-weight: 650;
-  letter-spacing: -0.03em;
+/* Mono, not Lexend: Lexend has no tabular figures, and a wall clock whose
+   digits shift width every minute is the one thing nobody can unsee. */
+.statusline__time {
+  font-size: var(--text-xl);
+  font-weight: 600;
   line-height: 1;
-  /* The accent on the clock is the one place color is used purely for
-     hierarchy rather than status. */
-  color: var(--text);
-  transition: color var(--dur-theme) var(--ease);
-}
-
-.topbar__seconds {
-  font-size: var(--text-lg);
-  font-weight: 500;
-  color: var(--text-faint);
-  line-height: 1;
-}
-
-.topbar__date {
-  font-size: var(--text-sm);
-  color: var(--text-dim);
   letter-spacing: -0.01em;
+  color: var(--text);
 }
 
-.topbar__right {
+.statusline__seconds {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--accent);
+  text-shadow: var(--glow-soft);
+}
+
+.statusline__meridiem {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: var(--track-label);
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------------------
+   Prompt line
+   --------------------------------------------------------------------------- */
+
+.statusline__prompt {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-2);
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
-.topbar__conn {
+.statusline__user {
+  color: var(--accent);
+  text-shadow: var(--glow-soft);
+}
+
+.statusline__path {
+  color: var(--text-dim);
+}
+
+.statusline__date {
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The segment divider, used on both sides of the bar. */
+.statusline__sep {
+  flex: none;
+  color: var(--border-strong);
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Right side
+   --------------------------------------------------------------------------- */
+
+.statusline__right {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition:
-    background-color var(--dur-theme) var(--ease),
-    border-color var(--dur-theme) var(--ease);
+  flex: none;
 }
 
-.topbar__conn-text {
+.statusline__conn {
   display: flex;
-  flex-direction: column;
-  line-height: 1.3;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
-.topbar__conn-label {
-  font-size: var(--text-xs);
+.statusline__conn-label {
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
   color: var(--text-dim);
-  letter-spacing: 0.02em;
 }
 
-.topbar__conn-latency {
-  font-size: var(--text-xs);
+.statusline__conn-latency {
   color: var(--text-faint);
+  min-width: 4.5ch; /* holds its width as the number changes */
+  text-align: right;
 }
 
-@media (max-width: 760px) {
-  .topbar__conn {
-    display: none;
-  }
-}
-
-@media (max-height: 700px) {
-  .topbar {
-    padding-bottom: var(--space-3);
-  }
-
-  /* The clock is the single largest element on the panel; on a short screen
-     it is the first thing that should give back height. */
-  .topbar__time {
-    font-size: var(--text-2xl);
-  }
-}
-
-.topbar__meridiem {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-  line-height: 1;
-}
-
-/* ---- screen off --------------------------------------------------------- */
-.topbar__sleep {
+/* The one control up here. Square, bordered, finger-sized -- and red only
+   while it is being pressed, so it never competes with the status colours. */
+.statusline__sleep {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-full);
-  color: var(--text-faint);
+  width: var(--touch-min);
+  height: calc(var(--touch-min) - 8px);
+  font-size: var(--text-lg);
+  color: var(--text-dim);
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   transition:
-    transform var(--dur-fast) var(--ease),
-    color var(--dur) var(--ease),
-    background-color var(--dur-theme) var(--ease),
-    border-color var(--dur-theme) var(--ease);
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
-.topbar__sleep svg {
-  width: 20px;
-  height: 20px;
-}
-
-.topbar__sleep:active {
-  transform: scale(0.92);
-  color: var(--text);
-  background: var(--surface-3);
+.statusline__sleep:active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
 }

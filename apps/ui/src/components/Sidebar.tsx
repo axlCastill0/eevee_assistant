@@ -1,122 +1,83 @@
 /**
- * The view switcher.
+ * The view switcher, as a multiplexer's window list.
  *
  * A rail rather than a drawer: there are a handful of views and the panel is
  * always on, so a hamburger would hide the only navigation behind an extra
  * tap for no gain. Targets are deliberately larger than --touch-min because
  * this is the control most likely to be hit without looking.
  *
- * The rail lists DESTINATIONS, not every route. Timers and alarms are apps
- * opened from the dashboard (USER DECISION 2026-10-16: keep the sidebar as it
- * is), so they appear in the launcher's grid instead and light the Dashboard
- * entry while open.
+ * Each entry carries a NUMBER, the way tmux numbers windows. Nothing on this
+ * panel can type `1`, so the number is not a shortcut -- it is the thing that
+ * makes the rail read as a window list rather than as a phone's tab bar, and
+ * it gives the active window somewhere to show itself other than the label.
+ *
+ * The rail lists DESTINATIONS, not every route. Timers, alarms and the wake
+ * app are launched from the dashboard (USER DECISION 2026-10-16) and light
+ * the dashboard entry while open.
  */
+import type { GlyphName } from '../fonts/glyphs'
 import type { Route } from '../lib/useRoute'
 import { HOME_APPS, navigate } from '../lib/useRoute'
+import { Icon } from './Term'
 import './Sidebar.css'
 
 interface Item {
   route: Route
+  key: string
   label: string
-  icon: React.ReactNode
+  icon: GlyphName
 }
 
-/* Icons are inline SVG at 24px on a 24px grid, stroke-only, so they inherit
-   currentColor and need no icon package. */
 const ITEMS: Item[] = [
-  {
-    route: 'dashboard',
-    label: 'Dashboard',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-           strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="13" r="8" />
-        <path d="M12 9v4l2.5 2M9 2h6" />
-      </svg>
-    ),
-  },
-  {
-    route: 'music',
-    label: 'Music',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-           strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="7" cy="18" r="3" />
-        <circle cx="18" cy="15.5" r="3" />
-        <path d="M10 18V6.5l11-2v11" />
-      </svg>
-    ),
-  },
-  {
-    route: 'systems',
-    label: 'Systems',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-           strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
-        <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
-        <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
-        <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
-      </svg>
-    ),
-  },
+  { route: 'dashboard', key: '1', label: 'dash', icon: 'dashboard' },
+  { route: 'music', key: '2', label: 'music', icon: 'music' },
+  { route: 'systems', key: '3', label: 'sys', icon: 'server' },
 ]
 
-/* Settings sits apart, at the bottom of the rail: it is configuration, not a
-   place you go to look at something. */
+/* Settings sits apart, at the bottom: it is configuration, not a place you go
+   to look at something. Window 0, as the odd one out. */
 const FOOTER_ITEMS: Item[] = [
-  {
-    route: 'settings',
-    label: 'Settings',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-           strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="3.2" />
-        <path d="M19.4 14.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1h-.2a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5v-.2a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z" />
-      </svg>
-    ),
-  },
+  { route: 'settings', key: '0', label: 'cfg', icon: 'settings' },
 ]
 
-function SidebarButton({ item, route }: { item: Item; route: Route }) {
-  // Dashboard stays lit while you are inside Timers or Alarms: those are
-  // apps launched from it, not places of their own in the rail, and a rail
-  // with nothing highlighted reads as "you are nowhere".
+function RailButton({ item, route }: { item: Item; route: Route }) {
   const active =
     route === item.route ||
     (item.route === 'dashboard' && HOME_APPS.includes(route))
+
   return (
     <button
       type="button"
-      className={`sidebar__item${active ? ' is-active' : ''}`}
+      className={`rail__item${active ? ' is-active' : ''}`}
       aria-current={active ? 'page' : undefined}
       onClick={() => navigate(item.route)}
     >
-      {/* The active marker is a separate element so switching views animates
-          transform only, never a layout property. */}
-      <span className="sidebar__item-icon">{item.icon}</span>
-      <span className="sidebar__item-label">{item.label}</span>
+      <span className="rail__bar" aria-hidden />
+      <span className="rail__key" aria-hidden>
+        {item.key}
+      </span>
+      <Icon name={item.icon} className="rail__icon" />
+      <span className="rail__label">{item.label}</span>
     </button>
   )
 }
 
 export function Sidebar({ route }: { route: Route }) {
   return (
-    <nav className="sidebar themed" aria-label="Views">
-      <div className="sidebar__mark" aria-hidden>
-        {/* The wordmark doubles as the "you are home" anchor. Not a button:
-            there is nowhere above the two views to go. */}
-        <span className="sidebar__mark-dot" />
+    <nav className="rail themed" aria-label="Views">
+      <div className="rail__mark" aria-hidden>
+        <span className="rail__mark-prompt">~$</span>
+        <span className="rail__mark-name">eevee</span>
       </div>
 
       {ITEMS.map((item) => (
-        <SidebarButton key={item.route} item={item} route={route} />
+        <RailButton key={item.route} item={item} route={route} />
       ))}
 
-      <div className="sidebar__spacer" />
+      <div className="rail__spacer" />
 
       {FOOTER_ITEMS.map((item) => (
-        <SidebarButton key={item.route} item={item} route={route} />
+        <RailButton key={item.route} item={item} route={route} />
       ))}
     </nav>
   )

@@ -63,7 +63,7 @@
 
 .dial__fill--sec {
   stroke-width: 4.5;
-  stroke: var(--info);
+  stroke: var(--warn);
 }
 
 /* Whichever ring is being turned comes forward; the other recedes. This is
@@ -125,7 +125,7 @@
   width: 11%;
   margin-left: -5.5%;
   margin-top: -3.7%;
-  background: var(--info);
+  background: var(--warn);
 }
 
 /* The inner orbit is inset so its knob lands on the inner ring rather than
@@ -149,7 +149,7 @@
 }
 
 .dial.is-on-seconds .dial__value {
-  color: var(--info);
+  color: var(--warn);
 }
 
 .dial__readout {
