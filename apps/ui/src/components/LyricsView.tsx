@@ -83,6 +83,10 @@ export function LyricsView({
           <p
             key={`${i}-${line.t ?? 0}`}
             ref={i === current ? activeRef : undefined}
+            /* The entrance stagger, capped: a 60-line song must not still be
+               arriving a second after the view opened. Set here rather than
+               in CSS so the cap is arithmetic rather than a nested min(). */
+            style={{ animationDelay: `${Math.min(i * 18, 420)}ms` }}
             className={`lyrics__line${
               i === current ? ' is-current' : ''
             }${synced && i < current ? ' is-past' : ''}${

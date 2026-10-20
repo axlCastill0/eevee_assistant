@@ -619,9 +619,22 @@ once. Full notes in `AGENT_CONTEXT.md` under `## wake on lan`.
 
 A button in the top right of the music view opens a full-screen lyrics page
 over the same drifting cover colours — big Lexend, the line being sung in
-white, the rest dimmed, scrolled to stay centred. It follows the song from the
-same interpolated `progressMs` the progress bar uses, so it needs no second
-clock.
+white with a soft bloom, the rest dimmed, scrolled to stay centred. It follows
+the song from the same interpolated `progressMs` the progress bar uses, so it
+needs no second clock.
+
+**Nothing is behind it but the background** (USER 2026-10-19): `.np` carries a
+`data-lyrics` attribute, and the stage and the transient badges are
+`display: none` while the view is open. The art and the controls were
+previously showing through the scrim and fighting the words for the same
+pixels. `display`, not `opacity`, so the cover's four animated transforms stop
+compositing while they cannot be seen; the `<img>` stays loaded, so reopening
+is instant.
+
+The view rises in and its lines arrive staggered (capped at 420ms, so a long
+song is not still arriving a second later). The current line's bloom is a
+*static* text-shadow that flips with the class — animating a shadow repaints
+every frame, which this project does not do anywhere.
 
 The button is **disabled whenever the track has no lyrics**, which is most of
 the information it carries. Lines come from LRCLIB through

@@ -108,6 +108,9 @@ export function NowPlaying({ active }: { active: boolean }) {
          playback stops -- see the animation-play-state rules in the
          stylesheet. */
       data-playing={data?.is_playing ? 'yes' : 'no'}
+      /* Drives the stylesheet: with lyrics up, everything except the moving
+         background layers is hidden. */
+      data-lyrics={showLyrics && hasLyrics ? 'yes' : 'no'}
     >
       {/* Both layers always rendered; only opacity changes. Each carries its
           own moving parts, so a track change crossfades the motion along with

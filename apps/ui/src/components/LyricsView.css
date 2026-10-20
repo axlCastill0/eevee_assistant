@@ -17,7 +17,32 @@
     rgba(0, 0, 0, 0.35) 70%,
     rgba(0, 0, 0, 0.55) 100%
   );
-  animation: fade-in var(--dur) var(--ease);
+  animation: lyrics-in var(--dur-slow) var(--ease-out);
+}
+
+/* The view arrives from below and settles. Opacity and transform only, one
+   element, once per open. */
+@keyframes lyrics-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 3%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Each line follows, staggered by its index (set in LyricsView.tsx). */
+@keyframes lyrics-line-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .lyrics__head {
@@ -113,7 +138,11 @@
   letter-spacing: -0.02em;
   padding: clamp(var(--space-2), 0.8vw, var(--space-3)) 0;
   color: rgba(255, 255, 255, 0.34);
-  /* Opacity and transform only, as everywhere else. */
+  /* backwards: the line holds the keyframe's opening state through its delay
+     instead of flashing at full opacity first. */
+  animation: lyrics-line-in var(--dur-slow) var(--ease-out) backwards;
+  /* Opacity, colour and transform only. The glow below is a static shadow
+     that flips with the class -- never a transitioned one. */
   transition:
     opacity var(--dur) var(--ease),
     color var(--dur) var(--ease),
@@ -125,10 +154,16 @@
   color: rgba(255, 255, 255, 0.22);
 }
 
+/* The line being sung. It grows a little and carries a soft white bloom --
+   the same trick the terminal chrome uses for red, and static for the same
+   reason: an animated text-shadow repaints every frame. */
 .lyrics__line.is-current {
   color: #fff;
-  transform: scale(1.04);
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
+  transform: scale(1.055);
+  text-shadow:
+    0 0 28px rgba(255, 255, 255, 0.5),
+    0 0 60px rgba(255, 255, 255, 0.22),
+    0 2px 24px rgba(0, 0, 0, 0.45);
 }
 
 /* An instrumental gap: present, so the break reads as one, but small. */

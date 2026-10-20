@@ -604,3 +604,16 @@
   opacity: 0.3;
   background: transparent;
 }
+
+/* With the lyrics up, NOTHING is behind them but the drifting colours (USER
+   2026-10-19). The art and the controls were showing through the scrim and
+   fighting the words for the same pixels.
+
+   display: none, not opacity: the stage must stop compositing its four
+   animated transforms while it is not on screen, and the cover <img> stays
+   loaded either way, so reopening is instant. */
+.np[data-lyrics='yes'] .np__stage,
+.np[data-lyrics='yes'] .np__notice,
+.np[data-lyrics='yes'] .np__stale {
+  display: none;
+}

@@ -798,6 +798,11 @@ lyrics (2026-10-19, USER): apps/backend/lyrics.py + components/LyricsView.tsx.
   can lag a skip by up to a second.
   The view highlights the current line from the SAME interpolated progressMs
   the progress bar uses, and keeps it centred with scrollIntoView.
+  NOTHING renders behind it but the background layers (USER 2026-10-19):
+  data-lyrics on .np display:none's the stage and the badges. display, not
+  opacity -- the cover's transforms must stop compositing, and the <img>
+  stays loaded so reopening is instant. The current line's glow is a STATIC
+  text-shadow flipped by the class, never a transitioned one.
 
 spotify_rules: their design guidelines are mandatory for API users. Keep the
   SPOTIFY attribution, do not alter album art, do not mix other content
