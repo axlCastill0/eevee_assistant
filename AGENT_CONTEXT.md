@@ -391,6 +391,20 @@ tts_voice: en_GB-jarvis-medium since 2026-10-24 (USER), was en_US-amy-medium.
   espeak-ng is already in the voice image (infra/docker/voice/Dockerfile) and
   ships en-gb-x-rp, so nothing new is needed at the image level.
 
+tts_loudness (USER 2026-10-24: the assistant was quieter than the timer and
+  alarm sounds): every utterance is peak-normalised in tts._level, applied
+  AFTER the resample because resample_poly rings and can overshoot the peak
+  it was handed. VOICE_TTS_PEAK (0.95, 0 disables), VOICE_TTS_MAX_BOOST (8,
+  stops near-silence becoming amplified noise), VOICE_TTS_GAIN (1.0, manual
+  trim, clips above 1.0 and warns).
+  WHY HERE AND NOT THE MIXER: timer/alarm audio is Chromium playing mastered
+  files near full scale, TTS is Piper playing wherever the voice peaks. They
+  share the speaker, so a device-level change moves both and fixes neither.
+  tts.py is the only code that touches TTS audio.
+  VERIFIED 2026-10-24 numerically: 0.35 peak -> 0.95 (rms x2.7), 0.12 -> 0.95
+  (capped at x8), 0.92 -> 0.95, near-silence untouched, gain 2.0 limited with
+  a warning.
+
 wake_word: hey_jarvis (openWakeWord, baked into the image) DEFAULT AGAIN
   2026-10-16. USER DECISION: the "hey eevee" heed export fired on non-speech
   room noise even at VOICE_WW_THRESHOLD=0.9. It is still supported and still

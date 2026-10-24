@@ -190,6 +190,26 @@ SLM_MAX_TOKENS = _int("VOICE_SLM_MAX_TOKENS", 40)
 TTS_MODEL_PATH = _str("VOICE_TTS_MODEL", f"{MODEL_DIR}/en_GB-jarvis-medium.onnx")
 TTS_CONFIG_PATH = _str("VOICE_TTS_CONFIG", f"{MODEL_DIR}/en_GB-jarvis-medium.onnx.json")
 
+# TTS LOUDNESS (USER 2026-10-24: the assistant was much quieter than the timer
+# and alarm sounds). Those play through Chromium from mastered files that sit
+# near full scale; Piper's output peaks wherever the voice happens to peak,
+# typically well below it. Turning the speaker up fixes one and ruins the
+# other, so the correction belongs HERE, on the TTS path only.
+#
+# Peak the utterance is normalised to, 0.0-1.0. 0 disables normalisation and
+# leaves Piper's own level alone. 0.95 leaves a little headroom for the
+# resampler's overshoot.
+TTS_PEAK = _float("VOICE_TTS_PEAK", 0.95)
+
+# Ceiling on that normalisation, so a near-silent phrase is not multiplied
+# into amplified noise.
+TTS_MAX_BOOST = _float("VOICE_TTS_MAX_BOOST", 8.0)
+
+# Manual trim applied after normalisation, for taste. Above 1.0 this will
+# clip -- the limiter catches it, but distortion is the cost. Prefer turning
+# the speaker down and leaving this at 1.0.
+TTS_GAIN = _float("VOICE_TTS_GAIN", 1.0)
+
 # ============================================================================
 # CPU BUDGET
 # ============================================================================

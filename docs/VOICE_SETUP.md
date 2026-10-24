@@ -88,6 +88,24 @@ waiting for an answer, so it is not the default. To try it, point
 `VOICE_TTS_MODEL` and `VOICE_TTS_CONFIG` at it and fetch the two files from
 `en/en_GB/jarvis/high/` in that repo.
 
+**Its volume is handled separately from everything else.** Piper's output
+peaks wherever the voice happens to peak, which is well below full scale,
+while the timer and alarm sounds are mastered files played by Chromium that
+sit near it — so the assistant sounded quiet next to its own alarms. Each
+utterance is now normalised to `VOICE_TTS_PEAK` (0.95 by default, 0 to turn
+it off) in `tts.py`, which is the only code that touches TTS audio, so
+nothing else on that speaker changes. In practice a typical phrase gets about
+2.7× louder.
+
+| Variable | Default | Does |
+|---|---|---|
+| `VOICE_TTS_PEAK` | `0.95` | peak each utterance is normalised to; `0` disables |
+| `VOICE_TTS_MAX_BOOST` | `8.0` | ceiling on that boost, so near-silence is not amplified into noise |
+| `VOICE_TTS_GAIN` | `1.0` | manual trim applied after; above 1.0 clips, and the log says so |
+
+Raise the speaker's own volume and both get louder together; that is what
+`alsamixer` is for. These three move only the voice.
+
 Any Piper voice works here. The full catalogue is at
 [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices); download
 the `.onnx` and its `.onnx.json` side by side into `models/` and set those two
