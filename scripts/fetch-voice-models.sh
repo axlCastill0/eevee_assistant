@@ -50,14 +50,30 @@ fetch \
 # --- Text to speech (~60 MB) -----------------------------------------------
 # Piper needs the .onnx and its .onnx.json side by side; the json carries the
 # sample rate and phoneme map.
+#
+# JARVIS (USER 2026-10-24), replacing en_US-amy-medium. A community voice from
+# jgkawell/jarvis, MIT licensed, fine-tuned for 2000 epochs from the official
+# en_GB-alan-medium -- which is the usual stand-in for this voice and is why
+# this one starts from it rather than from an American speaker. Same shape as
+# the voice it replaces (medium, 22.05 kHz, single speaker, espeak phonemes,
+# ~60 MB), so nothing downstream changes; its espeak voice is en-gb-x-rp,
+# Received Pronunciation, which is the whole point.
+#
+# The same repo has a `high` variant at ~108 MB. Better, and slower to
+# synthesize on a Pi 5, which is the trade this pipeline cannot afford by
+# default -- TTS sits in the user's waiting time. Swap the two URLs and
+# VOICE_TTS_MODEL/VOICE_TTS_CONFIG if you want it.
+#
+# Renamed on the way down to the lang-voice-quality convention the other
+# model files here use; upstream calls them plain jarvis-medium.*.
 fetch \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx" \
-  "en_US-amy-medium.onnx" \
-  "Piper voice en_US-amy-medium, ~60 MB"
+  "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx" \
+  "en_GB-jarvis-medium.onnx" \
+  "Piper voice en_GB-jarvis-medium, ~60 MB"
 
 fetch \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json" \
-  "en_US-amy-medium.onnx.json" \
+  "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx.json" \
+  "en_GB-jarvis-medium.onnx.json" \
   "Piper voice config"
 
 echo

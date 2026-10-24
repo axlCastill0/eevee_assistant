@@ -66,10 +66,32 @@ the container at `/app/models`:
 |---|---|---|
 | `silero_vad.onnx` | 2 MB | voice activity detection |
 | `qwen2.5-1.5b-instruct-q5_k_m.gguf` | 1.2 GB | intent classification |
-| `en_US-amy-medium.onnx` + `.json` | 60 MB | Piper TTS voice |
+| `en_GB-jarvis-medium.onnx` + `.json` | 60 MB | Piper TTS voice |
 
 openWakeWord (~50 MB) and Whisper `tiny.en` (~75 MB) are **baked into the
 image** instead, so first boot needs no network.
+
+### The voice it speaks in
+
+`en_GB-jarvis-medium` since 2026-10-24, replacing `en_US-amy-medium`. It comes
+from [jgkawell/jarvis](https://huggingface.co/jgkawell/jarvis) (MIT), a
+community voice fine-tuned for 2000 epochs from the official
+`en_GB-alan-medium` — the stock British male Piper voice, and the one people
+reach for when they want this. Its espeak voice is `en-gb-x-rp`, Received
+Pronunciation, which is most of the effect.
+
+It is a drop-in: same medium quality, same 22,050 Hz, single speaker, espeak
+phonemes, same ~60 MB, and the same ONNX signature, so nothing else in the
+pipeline changes. The same repo has a `high` variant (~108 MB) that sounds
+better and synthesizes more slowly; TTS sits inside the time you spend
+waiting for an answer, so it is not the default. To try it, point
+`VOICE_TTS_MODEL` and `VOICE_TTS_CONFIG` at it and fetch the two files from
+`en/en_GB/jarvis/high/` in that repo.
+
+Any Piper voice works here. The full catalogue is at
+[rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices); download
+the `.onnx` and its `.onnx.json` side by side into `models/` and set those two
+variables.
 
 The wake word itself is not downloaded either — it ships in the repo. Install
 it into the same directory:

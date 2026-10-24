@@ -371,7 +371,25 @@ models:
     - hey_eevee.onnx + hey_eevee.json (44KB + 2KB)  # install-wake-model.sh
     - silero_vad.onnx (2MB)
     - qwen2.5-1.5b-instruct-q5_k_m.gguf (1.2GB)
-    - en_US-amy-medium.onnx + .onnx.json (60MB)
+    - en_GB-jarvis-medium.onnx + .onnx.json (60MB)
+
+tts_voice: en_GB-jarvis-medium since 2026-10-24 (USER), was en_US-amy-medium.
+  SOURCE: huggingface.co/jgkawell/jarvis, MIT, community-trained -- fine-tuned
+  2000 epochs from the OFFICIAL en_GB-alan-medium, which is why it is the one
+  to use: alan is the stock British male Piper voice everyone reaches for as
+  a JARVIS stand-in, and this starts there rather than from an American
+  speaker. espeak voice is en-gb-x-rp (Received Pronunciation).
+  DROP-IN, verified 2026-10-24: config JSON has byte-identical key structure
+  to amy's, and the ONNX loads in onnxruntime with the stock Piper VITS
+  signature (input / input_lengths / scales -> output, no sid). Same medium
+  quality, 22,050 Hz and single speaker, so helpers.resample and the
+  POST_TTS_GRACE_MS budget are untouched.
+  A `high` variant exists in the same repo at ~108MB. NOT the default: TTS
+  sits inside the user's waiting time on a Pi 5. Two URLs in
+  scripts/fetch-voice-models.sh plus VOICE_TTS_MODEL/VOICE_TTS_CONFIG if you
+  want to try it.
+  espeak-ng is already in the voice image (infra/docker/voice/Dockerfile) and
+  ships en-gb-x-rp, so nothing new is needed at the image level.
 
 wake_word: hey_jarvis (openWakeWord, baked into the image) DEFAULT AGAIN
   2026-10-16. USER DECISION: the "hey eevee" heed export fired on non-speech

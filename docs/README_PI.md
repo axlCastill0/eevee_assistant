@@ -545,7 +545,7 @@ the voice container:
 |---|---|
 | `silero_vad.onnx` | 2 MB |
 | `qwen2.5-1.5b-instruct-q5_k_m.gguf` | 1.2 GB |
-| `en_US-amy-medium.onnx` + `.json` | 60 MB |
+| `en_GB-jarvis-medium.onnx` + `.json` | 60 MB |
 
 The script skips files that already exist, so it is safe to re-run after an
 interrupted download.

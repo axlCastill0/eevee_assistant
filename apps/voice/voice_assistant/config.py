@@ -183,8 +183,12 @@ SLM_PATH = _str("VOICE_SLM_MODEL", f"{MODEL_DIR}/qwen2.5-1.5b-instruct-q5_k_m.gg
 SLM_N_CTX = _int("VOICE_SLM_N_CTX", 2048)
 SLM_MAX_TOKENS = _int("VOICE_SLM_MAX_TOKENS", 40)
 
-TTS_MODEL_PATH = _str("VOICE_TTS_MODEL", f"{MODEL_DIR}/en_US-amy-medium.onnx")
-TTS_CONFIG_PATH = _str("VOICE_TTS_CONFIG", f"{MODEL_DIR}/en_US-amy-medium.onnx.json")
+# JARVIS since 2026-10-24 (USER), replacing en_US-amy-medium. Community voice
+# from jgkawell/jarvis (MIT), fine-tuned from the official en_GB-alan-medium;
+# same medium/22.05 kHz/single-speaker shape as the voice it replaces, so the
+# resample in helpers.py and the grace period above are unchanged.
+TTS_MODEL_PATH = _str("VOICE_TTS_MODEL", f"{MODEL_DIR}/en_GB-jarvis-medium.onnx")
+TTS_CONFIG_PATH = _str("VOICE_TTS_CONFIG", f"{MODEL_DIR}/en_GB-jarvis-medium.onnx.json")
 
 # ============================================================================
 # CPU BUDGET
