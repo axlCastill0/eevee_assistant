@@ -123,28 +123,71 @@
   text-align: right;
 }
 
-/* The one control up here. Square, bordered, finger-sized -- and red only
-   while it is being pressed, so it never competes with the status colours. */
-.statusline__sleep {
-  display: grid;
-  place-items: center;
-  width: var(--touch-min);
-  height: calc(var(--touch-min) - 8px);
-  font-size: var(--text-lg);
-  color: var(--text-dim);
+/* The screen control: two segments in one pill. The rounded ends are the one
+   place this panel is not square, and they are what make the pair read as a
+   single control rather than as two buttons that happen to touch. */
+.screenpill {
+  display: flex;
+  align-items: stretch;
+  height: calc(var(--touch-min) - 6px);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  transition:
-    color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
-    background-color var(--dur-fast) var(--ease);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
-.statusline__sleep:active {
-  color: var(--accent);
+.screenpill__seg {
+  display: grid;
+  place-items: center;
+  width: calc(var(--touch-min) - 2px);
+  font-size: var(--text-lg);
+  color: var(--text-dim);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+/* The divider is a border on the second segment, so the pill has exactly one
+   line between the halves whatever either of them is doing. */
+.screenpill__seg--power {
+  border-left: 1px solid var(--border-strong);
+}
+
+.screenpill__seg:active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* Holding the screen on. Filled, because this is a mode that stays on -- the
+   only latched control on the panel, and it has to be obvious from across the
+   room that the timer has been switched off. */
+.screenpill__seg.is-on {
+  color: #000;
+  background: var(--accent);
+  box-shadow: var(--glow-soft);
+}
+
+:root[data-theme='light'] .screenpill__seg.is-on {
+  color: var(--surface-1);
+}
+
+.screenpill:has(.is-on) {
   border-color: var(--accent);
+}
+
+.screenpill__seg--power:active {
+  color: var(--accent);
   background: var(--accent-wash);
+}
+
+/* Unavailable while the lock holds. Faded rather than gone: the lit half
+   beside it is the reason, and the pair only reads as a pair if both stay. */
+.screenpill__seg--power:disabled {
+  color: var(--text-faint);
+  opacity: 0.4;
+  background: transparent;
 }
 
 /* Short panels: the status line gives back a few pixels so the view below it

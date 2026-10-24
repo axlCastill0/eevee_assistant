@@ -230,6 +230,47 @@ _RULES: list[tuple[re.Pattern, str, Optional[str]]] = [
                 r"(?P<theme>dark|light|night|day|auto|automatic)", re.I),
      "set_theme", "theme"),
 
+    # -- lock_screen / unlock_screen --------------------------------------
+    # ABOVE the screen block (USER 2026-10-24). Every phrasing here contains
+    # one the block below also wants -- "don't turn the screen off" contains
+    # "turn the screen off" -- and while fullmatch already keeps them apart,
+    # the order is what makes that safe to rely on while either list grows.
+    (re.compile(r"(keep|hold)\s+(the\s+)?(screen|display|panel|monitor|it)\s+"
+                r"(on|awake|alive|up)", re.I), "lock_screen", None),
+    (re.compile(r"(stay|keep)\s+awake", re.I), "lock_screen", None),
+    (re.compile(r"(lock|freeze)\s+(the\s+)?(screen|display|panel)", re.I),
+     "lock_screen", None),
+    (re.compile(r"screen\s+lock(\s+on)?", re.I), "lock_screen", None),
+    (re.compile(r"don'?t\s+(turn|shut)\s+(the\s+)?"
+                r"(screen|display|panel|monitor|it)?\s*off", re.I),
+     "lock_screen", None),
+    # The other word order. Both are said; neither is rarer than the other.
+    (re.compile(r"don'?t\s+(turn|shut)\s+off\s+(the\s+)?"
+                r"(screen|display|panel|monitor|it)", re.I),
+     "lock_screen", None),
+    (re.compile(r"don'?t\s+let\s+(the\s+)?(screen|display|panel|it)\s+"
+                r"(turn\s+off|go\s+(off|dark|to\s+sleep)|sleep|blank)", re.I),
+     "lock_screen", None),
+    (re.compile(r"don'?t\s+(go|turn)\s+(dark|off|to\s+sleep)", re.I),
+     "lock_screen", None),
+    (re.compile(r"(prevent|stop)\s+(the\s+)?(screen|display)\s+(from\s+)?"
+                r"(turning\s+off|going\s+(off|dark)|sleeping|blanking)", re.I),
+     "lock_screen", None),
+    (re.compile(r"(no|disable)\s+(screen\s+)?(timeout|sleep)", re.I),
+     "lock_screen", None),
+
+    (re.compile(r"unlock\s+(the\s+)?(screen|display|panel)", re.I),
+     "unlock_screen", None),
+    (re.compile(r"screen\s+lock\s+off", re.I), "unlock_screen", None),
+    (re.compile(r"(let|allow)\s+(the\s+)?(screen|display|panel|it)\s+"
+                r"(to\s+)?(turn\s+off|go\s+(off|dark|to\s+sleep)|sleep|blank)", re.I),
+     "unlock_screen", None),
+    (re.compile(r"stop\s+(keeping|holding)\s+(the\s+)?"
+                r"(screen|display|panel|it)\s+(on|awake)", re.I),
+     "unlock_screen", None),
+    (re.compile(r"(enable|re-?enable)\s+(the\s+)?(screen\s+)?(timeout|sleep)", re.I),
+     "unlock_screen", None),
+
     # -- sleep_screen / wake_screen ---------------------------------------
     (re.compile(r"(turn\s+)?(the\s+)?(screen|display|panel|monitor)\s+off", re.I),
      "sleep_screen", None),

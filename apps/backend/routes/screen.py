@@ -32,3 +32,15 @@ def set_screen(on: bool = Body(..., embed=True),
     blanks for no apparent reason.
     """
     return screen.set_on(on, source)
+
+
+@router.post("/lock")
+def set_lock(locked: bool = Body(..., embed=True),
+             source: str = Body("api", embed=True)):
+    """Hold the screen awake against the idle timer, or release it.
+
+    Deliberately NOT part of POST /screen: "is the screen on" and "may the
+    timer turn it off" are different questions, and a caller that wants one
+    must not have to restate the other.
+    """
+    return screen.set_locked(locked, source)

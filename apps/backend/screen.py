@@ -9,8 +9,14 @@ The WebSocket command in events.py still fires alongside, because it blanks
 the dashboard instantly while the agent polls. A command cannot be asked
 "what is true now", which is why this state exists as well.
 
-In memory: the screen is physically on at boot, so "on" is the only honest
-starting point.
+THE LOCK (USER 2026-10-24) is a separate question: "may the idle timer blank
+this?" It holds the screen awake against the TIMEOUT ONLY. The button, the
+voice command and the agent all still work -- a lock that could not be
+overridden by someone asking for the screen off would be a panel you cannot
+turn off.
+
+In memory, both of them: the screen is physically on at boot, so "on" is the
+only honest starting point, and nothing is holding it there yet.
 """
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ log = logging.getLogger("screen")
 _on = True
 _changed_at = time.time()
 _source = "boot"
+_locked = False
 
 
 def state() -> dict:
@@ -32,6 +39,10 @@ def state() -> dict:
         # Which of the three asked for it. Only used for logs and debugging,
         # but it is the first question when the screen blanks unexpectedly.
         "source": _source,
+        # Held awake against the idle timer. The dashboard is what enforces
+        # it -- the timeout is counted there, off touch events this process
+        # never sees -- so this is the shared answer both ends read.
+        "locked": _locked,
     }
 
 
@@ -56,3 +67,18 @@ def set_on(on: bool, source: str = "api") -> dict:
 
 def is_on() -> bool:
     return _on
+
+
+def set_locked(locked: bool, source: str = "api") -> dict:
+    """Hold the screen awake, or stop holding it. Idempotent."""
+    global _locked
+
+    locked = bool(locked)
+    if locked != _locked:
+        _locked = locked
+        log.info("Screen lock %s (%s)", "on" if locked else "off", source)
+    return state()
+
+
+def is_locked() -> bool:
+    return _locked

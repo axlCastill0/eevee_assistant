@@ -160,6 +160,8 @@ export interface ScreenState {
   on: boolean
   changed_at: number
   source: string
+  /** Held awake against the idle timer. Nothing else is affected. */
+  locked: boolean
 }
 
 export interface ClockState {
@@ -327,6 +329,11 @@ export function updateSettings(values: {
  *  when a panel blanks for no apparent reason. */
 export function setScreen(on: boolean, source: string) {
   return post<ScreenState>('/screen', { on, source })
+}
+
+/** Hold the screen awake against the idle timer, or release it. */
+export function setScreenLock(locked: boolean, source: string) {
+  return post<ScreenState>('/screen/lock', { locked, source })
 }
 
 /** Same-origin audio, streamed by the backend out of the media directory. */

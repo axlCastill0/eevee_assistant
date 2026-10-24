@@ -145,6 +145,8 @@ Expected: *"Everything good."* If the voice container has not been running for
 | `show_page` | "go to music", "check systems", "take me back to the dashboard" | pushes to the dashboard |
 | `sleep_screen` | "turn the screen off", "good night" | pushes to the dashboard |
 | `wake_screen` | "wake up", "screen on" | pushes to the dashboard |
+| `lock_screen` | "keep the screen on", "don't let it turn off" | pushes to the dashboard |
+| `unlock_screen` | "unlock the screen", "let it sleep again" | pushes to the dashboard |
 | `get_weather` | "what's the weather", "do I need a jacket" | Open-Meteo |
 | `list_capabilities` | "what can you do", "help" | the registry itself |
 | `get_uptime` | "how long have you been running" | `/proc/uptime` |
@@ -155,6 +157,11 @@ Every one has at least three phrasings and never repeats itself back-to-back.
 Four intents take an item: `set_theme` (`dark`/`light`/`auto`), `show_page`
 (`dashboard`/`music`/`systems`, and `timers`/`alarms` if you name them),
 `set_timer` and `cancel_timer`.
+
+**"turn the screen off" wins over the lock.** `lock_screen` only ever means
+"do not let the idle timer blank this", so asking for the screen off releases
+the lock and then blanks the panel. Nothing you can say leaves the screen
+unable to turn off.
 
 **"check systems" navigates, it does not report.** That phrase belongs to
 `show_page` (USER 2026-10-19) because the systems page answers the question by

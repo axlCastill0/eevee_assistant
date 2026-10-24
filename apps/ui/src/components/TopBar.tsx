@@ -26,6 +26,8 @@ export function TopBar({
   timerCount,
   alarmSoon,
   onSleep,
+  screenLocked,
+  onLock,
 }: {
   now: Date
   route: Route
@@ -39,6 +41,9 @@ export function TopBar({
   /** An alarm is set to go off within 24 hours. */
   alarmSoon: boolean
   onSleep: () => void
+  /** The screen is being held awake against the idle timer. */
+  screenLocked: boolean
+  onLock: (locked: boolean) => void
 }) {
   const { hm, seconds, meridiem } = clockTime(now)
 
@@ -94,16 +99,45 @@ export function TopBar({
           │
         </span>
 
-        {/* Screen off. Last in the row: the only control here that hides
-            everything else. */}
-        <button
-          type="button"
-          className="statusline__sleep"
-          aria-label="Turn the screen off"
-          onClick={onSleep}
-        >
-          <Icon name="power" />
-        </button>
+        {/* The screen control: one pill, two halves (USER 2026-10-24).
+            They belong together because they are the same subject said two
+            ways -- "keep it on" and "turn it off" -- and because the left
+            half is the reason the right one is unavailable.
+
+            Last in the row: the only controls here that hide everything
+            else, and a thumb reaching the corner should not pass over the
+            status icons on the way. */}
+        <div className="screenpill" role="group" aria-label="Screen">
+          <button
+            type="button"
+            className={`screenpill__seg${screenLocked ? ' is-on' : ''}`}
+            aria-pressed={screenLocked}
+            aria-label={
+              screenLocked
+                ? 'Let the screen turn itself off again'
+                : 'Keep the screen on'
+            }
+            onClick={() => onLock(!screenLocked)}
+          >
+            <Icon name="lock" />
+          </button>
+
+          <button
+            type="button"
+            className="screenpill__seg screenpill__seg--power"
+            /* Not hidden, DISABLED: the lock beside it is the explanation,
+               and a control that vanishes teaches nothing. */
+            disabled={screenLocked}
+            aria-label={
+              screenLocked
+                ? 'Screen off — unavailable while the screen is held on'
+                : 'Turn the screen off'
+            }
+            onClick={onSleep}
+          >
+            <Icon name="power" />
+          </button>
+        </div>
       </div>
     </header>
   )

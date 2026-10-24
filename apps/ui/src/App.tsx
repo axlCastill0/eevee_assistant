@@ -6,7 +6,7 @@ import { ScreenVeil } from './components/ScreenVeil'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { VoiceDialog } from './components/VoiceDialog'
-import { setScreen, stopAlarm, stopRingingTimers } from './lib/api'
+import { setScreen, setScreenLock, stopAlarm, stopRingingTimers } from './lib/api'
 import { useClock } from './lib/useClock'
 import { useClockState } from './lib/useClockState'
 import { useIdle } from './lib/useIdle'
@@ -36,6 +36,9 @@ export default function App() {
 
   const [openName, setOpenName] = useState<string | null>(null)
   const [screenOff, setScreenOff] = useState(false)
+  // Held awake against the IDLE TIMER only. The button, the voice command and
+  // the host agent all still turn the screen off while this is set.
+  const [screenLocked, setScreenLocked] = useState(false)
 
   // Stable identities: RingingBanner keys its audio effect on what it is
   // given, and a fresh arrow each render restarts the sound every poll.
@@ -54,6 +57,14 @@ export default function App() {
     (source: string) => {
       setScreenOff(true)
       void setScreen(false, source).then(refreshClock)
+    },
+    [refreshClock],
+  )
+
+  const lockScreen = useCallback(
+    (locked: boolean) => {
+      setScreenLocked(locked)
+      void setScreenLock(locked, 'button').then(refreshClock)
     },
     [refreshClock],
   )
@@ -85,6 +96,9 @@ export default function App() {
           navigate(command.value as Route)
         }
         break
+      case 'screen_lock':
+        setScreenLocked(command.value === 'on')
+        break
       case 'sleep_screen':
         setScreenOff(true)
         break
@@ -105,13 +119,20 @@ export default function App() {
     if (serverScreenOn !== undefined) setScreenOff(!serverScreenOn)
   }, [serverScreenOn])
 
+  const serverLocked = clock.data?.screen.locked
+  useEffect(() => {
+    if (serverLocked !== undefined) setScreenLocked(serverLocked)
+  }, [serverLocked])
+
   // Idle blank, per Settings. Zero disables it.
   const timeoutMin = Number(clock.data?.settings.screen_timeout_min ?? '0')
   const idleMs = Number.isFinite(timeoutMin) && timeoutMin > 0 ? timeoutMin * 60_000 : 0
   const idle = useIdle(idleMs)
+  // The lock is checked HERE and nowhere else: it was only ever meant to stop
+  // the timer, so the button and the voice command are untouched by it.
   useEffect(() => {
-    if (idle && !screenOff) sleepScreen('idle')
-  }, [idle, screenOff, sleepScreen])
+    if (idle && !screenOff && !screenLocked) sleepScreen('idle')
+  }, [idle, screenOff, screenLocked, sleepScreen])
 
   // The event stream only reports what the pipeline SAYS it is doing, so a
   // pipeline that died mid-utterance would leave the pill stuck on green
@@ -156,6 +177,8 @@ export default function App() {
             timerCount={clock.timers.filter((t) => !t.ringing).length}
             alarmSoon={clock.alarmSoon}
             onSleep={() => sleepScreen('button')}
+            screenLocked={screenLocked}
+            onLock={lockScreen}
           />
         )}
 

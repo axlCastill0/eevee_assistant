@@ -146,6 +146,22 @@ INTENTS: dict[str, Intent] = {
         description="turn the dashboard screen off, blank or dim the display",
         needs_item=False,
     ),
+    "lock_screen": Intent(
+        name="lock_screen",
+        description=(
+            "keep the dashboard screen awake, stop it turning itself off "
+            "after a while"
+        ),
+        needs_item=False,
+    ),
+    "unlock_screen": Intent(
+        name="unlock_screen",
+        description=(
+            "let the dashboard screen turn itself off again after a while, "
+            "stop keeping it awake"
+        ),
+        needs_item=False,
+    ),
     "get_weather": Intent(
         name="get_weather",
         description="ask about the weather, the temperature, or whether it is raining",
@@ -426,7 +442,35 @@ def _show_page(item: Optional[str]) -> tuple[str, bool]:
     ), True
 
 
+def _lock_screen(item: Optional[str]) -> tuple[str, bool]:
+    screen.set_locked(True, "voice")
+    events.hub.publish_command("screen_lock", "on")
+    return _pick(
+        "Keeping the screen on. It won't blank on its own.",
+        "Screen's staying awake until you say otherwise.",
+        "Holding the screen on.",
+    ), True
+
+
+def _unlock_screen(item: Optional[str]) -> tuple[str, bool]:
+    screen.set_locked(False, "voice")
+    events.hub.publish_command("screen_lock", "off")
+    return _pick(
+        "The screen can turn itself off again.",
+        "Released. It'll blank after the usual wait.",
+        "Letting it sleep on its own again.",
+    ), True
+
+
 def _sleep_screen(item: Optional[str]) -> tuple[str, bool]:
+    # Asking for the screen off OUTRANKS the lock (USER 2026-10-24): the lock
+    # only ever meant "do not let the timer do this", and someone saying it
+    # out loud is not the timer. Released first, so the panel does not wake
+    # itself back up a moment later.
+    if screen.is_locked():
+        screen.set_locked(False, "voice: sleep")
+        events.hub.publish_command("screen_lock", "off")
+
     # BOTH, and they do different jobs. The command blacks the dashboard out
     # instantly over the WebSocket; the state is what the host helper polls to
     # actually cut the backlight, and what any browser connecting later reads
@@ -837,6 +881,8 @@ _HANDLERS: dict[str, Callable[[Optional[str]], tuple[str, bool]]] = {
     "system_health": _system_health,
     "get_time": _get_time,
     "get_date": _get_date,
+    "lock_screen": _lock_screen,
+    "unlock_screen": _unlock_screen,
     "greeting": _greeting,
     "repeat_last": _repeat_last,
     "set_theme": _set_theme,

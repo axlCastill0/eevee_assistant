@@ -1145,6 +1145,10 @@ NOT RETAINED, and outside the state sequence. A command is a thing that
 
 commands:
   set_theme     value dark|light|auto -> useTheme.choose(), persisted
+  screen_lock   value on|off -> holds the screen awake against the IDLE TIMER
+                only. Backend state too (screen.set_locked, POST /screen/lock,
+                reported by GET /screen and /clock/state), so a browser opened
+                later agrees with the panel.
   navigate      value = a route name -> navigate(); App VALIDATES it against
                 ROUTES before using it, because the backend's page vocabulary
                 and the bundle's route list are two lists that can drift
@@ -1154,6 +1158,18 @@ commands:
 repeated identical commands DO apply again: the UI keys the effect on the
   command object's identity, which is fresh every time. Verified by sending
   sleep_screen twice.
+
+SCREEN LOCK (USER 2026-10-24): one pill in the status line, two halves --
+  lock on the left, power on the right, power DISABLED (not hidden) while the
+  lock is on.
+  SCOPE IS THE IDLE TIMER AND NOTHING ELSE. The button, the voice command and
+  the host agent all still turn the screen off while locked; a lock that could
+  not be overridden would be a panel you cannot turn off.
+  sleep_screen RELEASES the lock first, then blanks -- see _sleep_screen in
+  intents.py. Do not "fix" that into a no-op when locked.
+  Enforced in ONE place: the idle effect in App.tsx. The timer is counted in
+  useIdle off touch events the backend never sees, so the backend holds the
+  flag and the panel obeys it.
 
 SCREEN OFF IS AN OVERLAY, NOT DISPLAY POWER-OFF:
   a browser cannot DPMS, and the backend runs in a container with no access

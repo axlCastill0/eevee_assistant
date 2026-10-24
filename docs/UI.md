@@ -336,6 +336,34 @@ still wakes on touch, it is just not actually off.
 Touch input keeps working with the backlight off, which is what makes
 tap-to-wake possible at all.
 
+#### The screen lock
+
+The status line's screen control is one pill with two halves (USER
+2026-10-24): a lock on the left, power on the right. The lock **holds the
+screen awake against the idle timer, and nothing else** — the button, the
+voice command and the host agent all still turn the screen off while it is on.
+A lock that could not be overridden by someone asking for the screen off would
+be a panel you cannot turn off.
+
+- The two halves are one control because they are the same subject said two
+  ways, and because the left one is the reason the right one is unavailable.
+  While the lock is on, the power half is **disabled, not hidden** — a control
+  that vanishes teaches nothing about why.
+- It is the only latched control on the panel, so it fills with the accent
+  rather than merely outlining: "the timer is switched off" has to be readable
+  from across the room.
+- Saying **"turn the screen off"** releases the lock *and* blanks the panel,
+  in that order. The lock only ever meant "do not let the timer do this", and
+  someone saying it out loud is not the timer.
+- `lock_screen` / `unlock_screen` by voice ("keep the screen on", "don't let
+  it turn off", "unlock the screen"), and the pill follows — the state lives
+  in the backend (`POST /screen/lock`, reported in `GET /screen`), so a
+  browser opened afterwards agrees with the panel.
+
+The enforcement is client-side, because the idle timer is: the timeout is
+counted in `useIdle` off touch events the backend never sees. The lock is
+checked in exactly one place, the idle effect in `App.tsx`.
+
 **Systems** — the service report. A log, not a grid, since 2026-10-19: the
 question this page answers is "is anything wrong", and a column of aligned
 verdicts answers it in one downward glance where a grid made the eye hunt.

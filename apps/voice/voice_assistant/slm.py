@@ -111,6 +111,15 @@ Output: {{"intent": "sleep_screen", "item": null}}
 User: "bring the display back"
 Output: {{"intent": "wake_screen", "item": null}}
 
+User: "keep the screen on"
+Output: {{"intent": "lock_screen", "item": null}}
+
+User: "don't let the panel turn itself off"
+Output: {{"intent": "lock_screen", "item": null}}
+
+User: "you can let the screen sleep again"
+Output: {{"intent": "unlock_screen", "item": null}}
+
 User: "do I need an umbrella today"
 Output: {{"intent": "get_weather", "item": null}}
 
