@@ -423,9 +423,14 @@ slowly around the centre, with **Nothing playing** under it and nothing else:
 ```
 
 It is 72% of the screen height, because an idle panel in a room should look
-like something rather than like a failure. **Drag it left or right** and it
-spins like a record, carries on with momentum, and coasts to a stop while the
-drift continues underneath. Putting a finger on a spinning disc stops it dead.
+like something rather than like a failure. The artwork is cropped to a circle,
+so what floats there is a disc rather than a picture of one.
+
+**Drag it left or right** and it spins like a record, carries on with
+momentum, and coasts to a stop while the drift continues underneath. Dragging
+right turns it anticlockwise — the way a disc goes when you push it anywhere
+at or below its middle, which at this size is where your hand lands. Putting a
+finger on a spinning disc stops it dead.
 
 That is three elements doing three jobs — two CSS wrappers for the drift, one
 inner node whose rotation is written by JS — because an element has a single

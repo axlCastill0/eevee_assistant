@@ -43,6 +43,16 @@ import './IdleDisc.css'
  *  that a small nudge launches it. */
 const DEG_PER_PX = 0.55
 
+/** Which way a rightward drag turns the disc (USER DECISION 2026-10-25:
+ *  it was backwards).
+ *
+ *  -1 means drag right => anticlockwise, which is what the disc does when you
+ *  push it anywhere at or below its middle -- and on a disc this tall that is
+ *  where a hand actually lands. Applied in BOTH places a drag becomes
+ *  rotation, so the live drag and the flick that follows it can never
+ *  disagree about direction. */
+const DIRECTION = -1
+
 /** Fraction of the velocity kept per 16.7 ms. 0.982 coasts for roughly four
  *  seconds from a hard flick, which is about how long a real disc would. */
 const DECAY_PER_FRAME = 0.982
@@ -120,7 +130,7 @@ export function IdleDisc() {
   const onMove = useCallback(
     (e: React.PointerEvent) => {
       if (!dragging.current || !latest.current) return
-      angle.current += (e.clientX - latest.current.x) * DEG_PER_PX
+      angle.current += DIRECTION * (e.clientX - latest.current.x) * DEG_PER_PX
       prev.current = latest.current
       latest.current = { x: e.clientX, t: e.timeStamp }
       draw()
@@ -142,7 +152,7 @@ export function IdleDisc() {
       // dt of 0 happens when the finger never moved (a tap) or when two
       // samples share a timestamp. Either way there is no flick to hand over.
       if (a && b && dt > 0) {
-        const speed = ((b.x - a.x) * DEG_PER_PX) / dt
+        const speed = (DIRECTION * (b.x - a.x) * DEG_PER_PX) / dt
         velocity.current = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, speed))
       }
       prev.current = null

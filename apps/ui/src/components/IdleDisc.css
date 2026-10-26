@@ -32,6 +32,13 @@
      screen "70% of the height" is the point. */
   width: min(72vh, 76vw);
   aspect-ratio: 1;
+  /* CIRCULAR CROP (USER DECISION 2026-10-25). The artwork is a square with
+     the drive's bracket furniture in the corners; this keeps the disc and
+     throws the rest away, so what floats on screen is a disc rather than a
+     picture of one. The square's black background goes with it, which is why
+     the glow that used to soften that edge is gone. */
+  border-radius: 50%;
+  overflow: hidden;
   /* The rotation itself is written by JS. No `transition` on transform: it is
      set every frame while coasting, and easing a value that is already being
      animated makes the disc lag behind the finger. */
@@ -48,25 +55,15 @@
   user-select: none;
   -webkit-user-drag: none;
   animation: fade-in var(--dur-slow) var(--ease);
-}
-
-/* The artwork's own background is black, which sits on the music view's dark
-   backdrop -- but the view is themed, so in light mode the square would read
-   as a hole. A soft glow under it softens the edge in both themes without
-   putting a box around the art. */
-.idle__spin::after {
-  content: '';
-  position: absolute;
-  inset: -8%;
-  z-index: -1;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 0, 0, 0.55) 40%, transparent 72%);
-  pointer-events: none;
+  /* The disc's own radius is 0.906 of the square's inscribed circle
+     (measured off the asset), so without this the crop would leave a ring of
+     the artwork's black background around it. 1.11 overfills by ~1%, which
+     costs an invisible sliver of the rim and guarantees no ring. */
+  transform: scale(1.11);
 }
 
 .idle__spin {
   position: relative;
-  isolation: isolate;
 }
 
 /* ---------------------------------------------------------------------------

@@ -891,6 +891,19 @@ idle screen (2026-10-25, USER): components/IdleDisc.tsx. When the status is
     rate_limited, loading, backend error) keep plain text and their button.
     Each of those is something to FIX, and a toy spinning over them reads as
     the panel not taking the problem seriously.
+  CIRCULAR CROP (2026-10-25, USER): border-radius on the drag target plus
+    `scale(1.11)` on the image. The artwork is a square whose corners hold the
+    drive's bracket furniture; the crop keeps only the disc. The 1.11 is
+    measured, not guessed -- the disc's radius is 0.906 of the square's
+    inscribed circle, so without it the crop leaves a ring of the artwork's
+    black background. Re-measure if the asset is ever replaced.
+    The soft glow that used to sit under the art is gone with it: it existed
+    to soften a square edge that no longer exists.
+  SPIN DIRECTION: `DIRECTION = -1` in IdleDisc.tsx. Drag right turns the disc
+    anticlockwise, which is what it does when pushed at or below its middle --
+    and at 72vh that is where a hand lands. It was the other way round until
+    USER said so on 2026-10-25. Applied in BOTH places a drag becomes
+    rotation, so a live drag and the flick after it cannot disagree.
   THREE ELEMENTS, THREE JOBS, so nothing fights over `transform`:
     .idle__orbit  CSS wander, 19s
     .idle__bob    CSS drift,  11s   (co-prime: realign every ~3.5 min)
@@ -1733,6 +1746,16 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-25 macOS, vite + the browser pane at 1024x600: the disc's
+     circular crop and inverted spin. The crop sits exactly on the disc edge
+     with no ring of the artwork's black background and no bracket furniture
+     left in frame -- the 1.11 scale was derived by radially scanning the
+     asset (median outer radius 232px of a 256px half-width). Direction
+     verified by measuring the rendered matrix: a 100px drag right turns it
+     -55deg (anticlockwise) and the same drag left turns it +55deg, i.e.
+     opposite and inverted from the previous build.
+     NOTE: a scaled-down screenshot makes the cropped disc look washed out;
+     at full fidelity it is as bright as before. Do not chase that."
   - "2026-10-25 macOS, vite + the browser pane at 1024x600, light AND dark:
      the music view's idle disc. The backend was not running, so
      /spotify/now-playing was stubbed in the page and every other call 500'd
