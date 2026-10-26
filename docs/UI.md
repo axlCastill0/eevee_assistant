@@ -409,6 +409,35 @@ width, so the halves cannot drift apart at any panel size. The background is
 built from the cover's two dominant colours; see `lib/coverColors.ts`, and
 `docs/SPOTIFY.md` for the whole feature.
 
+When nothing is playing, the view becomes a large dithered disc wandering
+slowly around the centre, with **Nothing playing** under it and nothing else:
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  ┌──────────────┐                    │
+│                  │   ▓▒░ disc   │   ← drifts, and    │
+│                  │   ░▒▓ art    │     spins if you   │
+│                  └──────────────┘     flick it       │
+│                   Nothing playing                    │
+└──────────────────────────────────────────────────────┘
+```
+
+It is 72% of the screen height, because an idle panel in a room should look
+like something rather than like a failure. **Drag it left or right** and it
+spins like a record, carries on with momentum, and coasts to a stop while the
+drift continues underneath. Putting a finger on a spinning disc stops it dead.
+
+That is three elements doing three jobs — two CSS wrappers for the drift, one
+inner node whose rotation is written by JS — because an element has a single
+`transform` and nothing here ever writes a property something else is
+animating. The rotation is JS only because momentum is the one part CSS
+cannot express; there is no three.js, and a face-on disc would not benefit
+from it. See `components/IdleDisc.tsx`.
+
+The disc shows **only** for "nothing playing". The states that need fixing —
+Spotify not set up, Connect Spotify, unreachable, rate limited — keep their
+plain text and their button.
+
 This view keeps its own look — full bleed, cover colours, white type. It is a
 display surface rather than a pane, and the terminal chrome would only be in
 front of the art. The one concession is the corner radius, which now matches

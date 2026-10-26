@@ -101,6 +101,9 @@ apps/
                       every route: timers/alarms are launched from Home and
                       light the Dashboard entry while open
     src/components/AppHeader.tsx  back-to-launcher header for Timers/Alarms
+    src/components/IdleDisc.tsx   the music view's "nothing playing" disc:
+                      CSS orbit on two wrappers, flick-to-spin in a rAF loop
+                      on a third. src/assets/idle-disc.png is its artwork
     src/components/TimerDial.tsx  drag-to-set duration. TWO rings: outer =
                       minutes, inner = seconds; the ring is chosen at
                       touch-down from the radius and never re-tested
@@ -201,7 +204,8 @@ ui:
           on the compositor. A JS animation library would add ~50KB and run
           work on the main thread the Pi does not need to do.
   deps: react, react-dom (runtime). Everything else is devDependencies.
-  payload: 283KB js / 87KB gzip, 51KB css / 10KB gzip, 89KB fonts
+  payload: 294KB js / 91KB gzip, 70KB css / 12KB gzip, 94KB fonts,
+           plus idle-disc.png (73KB, hashed, cached forever by nginx)
            (was 265/82 js and 35/7 css before the launcher, the timer and
             alarm apps and the wake app landed on 2026-10-16)
   fonts: Inter + JetBrains Mono, SELF-HOSTED, latin subset only, declared by
@@ -876,6 +880,36 @@ colours: lib/coverColors.ts draws the cover into a 32x32 canvas, buckets into
   colour (hue rotated, lightness pushed the other way) instead of showing a
   flat wash. Two stacked gradient layers crossfade on track change, because a
   gradient cannot transition and an opacity can.
+
+idle screen (2026-10-25, USER): components/IdleDisc.tsx. When the status is
+  `idle` -- and ONLY then -- the view is a large dithered disc wandering
+  around the centre with "Nothing playing" under it, and no body copy.
+  size: 72vh, capped at 76vw. USER asked for "at least 70% of the screen
+    height", so there is no upper px clamp: on a taller screen that IS the
+    point. Measured 73.5% at 1024x600.
+  the other empty states (unconfigured, unauthorized, unreachable,
+    rate_limited, loading, backend error) keep plain text and their button.
+    Each of those is something to FIX, and a toy spinning over them reads as
+    the panel not taking the problem seriously.
+  THREE ELEMENTS, THREE JOBS, so nothing fights over `transform`:
+    .idle__orbit  CSS wander, 19s
+    .idle__bob    CSS drift,  11s   (co-prime: realign every ~3.5 min)
+    .idle__spin   JS rotation, written straight to the node
+  NO three.js (USER DECISION): the disc is seen face-on, so "spin on its own
+    axis" is one `rotate()`. A WebGL context plus ~170KB of library would draw
+    the same pixels. CSS cannot express momentum, so the rotation -- and only
+    the rotation -- is a rAF loop.
+  the spin is written to the NODE, not to state: a coast is ~60 renders a
+    second for several seconds, and that is a reconciliation per frame on a
+    Pi for one number that lands on one element.
+  flick velocity comes from the LAST TWO pointer samples, not the whole
+    gesture: a flick means how fast the finger was moving when it LEFT, and
+    averaging in a slow lead-in makes it feel mushy. Capped at 2.2 deg/ms so
+    two samples a millisecond apart cannot launch it. Decay is time-based, so
+    a dropped frame costs the spin its time rather than extending it.
+  grabbing a spinning disc stops it dead, the way a hand on a record does.
+  the rAF loop is cancelled on unmount -- leaving the view mid-coast would
+    otherwise run it against a detached node until it slowed down.
 
 lyrics (2026-10-19, USER): apps/backend/lyrics.py + components/LyricsView.tsx.
   SOURCE IS LRCLIB (lrclib.net), not Spotify: Spotify's lyrics are
@@ -1608,6 +1642,12 @@ xterm_is_required:
 | 2026-10-16 | /clock/state polled by the app shell, not the Dashboard view | an alarm set for 7am would be silent whenever the panel was left on Music |
 | 2026-10-16 | theme control moved from the top bar to Settings | USER: free the top bar for status icons. Storage stays per-browser localStorage -- a theme belongs to a display, not the house |
 | 2026-10-16 | sounds are files in a read-only bind mount, not uploads | `scp` is the whole interface, and there is no upload endpoint to defend |
+| 2026-10-25 | "nothing playing" is a big dithered disc, not a line of text | USER. The music view is the one screen that is idle most of the time; an empty panel in a room should look like something rather than like a failure |
+| 2026-10-25 | the disc spins with CSS + a rAF loop, NOT three.js | USER chose this over the library. Seen face-on, "spin on its own axis" is one rotate(); three.js would add ~170KB and a WebGL context to draw identical pixels on a Pi already compositing a kiosk. Momentum is the one part CSS cannot express, so only the rotation is JS |
+| 2026-10-25 | orbit and spin live on SEPARATE elements | an element has one `transform`. CSS owns the two wrappers, JS owns the inner node, and neither ever writes what the other animates. Same rule the now-playing cover already follows |
+| 2026-10-25 | the disc is 72vh with no px ceiling | USER: "at least 70% the height of the screen". A clamp would quietly break that promise on anything taller than the Pi panel |
+| 2026-10-25 | idle screen carries NO body copy | USER. The disc and three words say it; the sentence about starting a track on another device was explaining something nobody was confused by |
+| 2026-10-25 | empty-state text on the music view is hardcoded white | BUG FIX: it used var(--text), and this view's backdrop is dark in BOTH themes, so every empty-state message was near-black on near-black in light mode. .np__title and .np__artist were already hardcoded for exactly this reason |
 | 2026-10-16 | music view is full bleed, no top bar | USER: the clock, voice pill and connection readout are noise in front of an album cover. The sidebar stays, so there is always a way out of the view |
 | 2026-10-16 | VOICE_WW_THRESHOLD=0.9 on the Pi, overriding the sidecar's 0.603 | USER: the calibrated value fired on non-speech room noise. Env only, no rebuild, and the sidecar stays the documented default for anyone else |
 | 2026-10-16 | dashboard became an SPA: sidebar rail + hash router | USER: multiple views. Chrome (clock, voice pill) stays global because those two must be readable on every page |
@@ -1693,6 +1733,26 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-25 macOS, vite + the browser pane at 1024x600, light AND dark:
+     the music view's idle disc. The backend was not running, so
+     /spotify/now-playing was stubbed in the page and every other call 500'd
+     -- which also proved the disc renders from the real component path and
+     not from a special case.
+     LAYOUT: disc measured 73.5% of viewport height (445px of 600), nothing
+     clipped top or bottom with the orbit at full swing, body copy absent,
+     title white. Switching the stub to `unconfigured` showed NO disc and the
+     full explanatory text, confirming the disc is idle-only.
+     SPIN: a flick coasts and decays to a complete stop (~6s from a hard
+     one); catching a spinning disc halts it dead; a tap with no movement
+     does not fling it; a slow drag follows the finger and barely coasts; the
+     CSS orbit keeps running throughout and is untouched by the spin; leaving
+     the view mid-coast unmounts cleanly with no console errors.
+     NOT VERIFIED: real touch flicks on the Pi (events were synthesised with
+     real delays so the timestamps were genuine, but a finger is not a mouse),
+     the disc against REAL cover colours behind it (no Spotify credentials
+     here), and the animation cost on a Pi GPU at 72vh -- the largest moving
+     element the panel has yet drawn, and the thing to look at first if the
+     music view ever feels slow."
   - "2026-10-16 macOS, REAL backend (uvicorn in a venv) + vite + the browser
      pane at 1024x600, light AND dark: the launcher trim, the wake app, the
      two-ring dial and second-level alarms.

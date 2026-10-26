@@ -26,6 +26,7 @@ import { useLyrics } from '../lib/useLyrics'
 import { useSpotify } from '../lib/useSpotify'
 import { Icon } from '../components/Term'
 import { LyricsView } from '../components/LyricsView'
+import { IdleDisc } from '../components/IdleDisc'
 import './NowPlaying.css'
 
 /** mm:ss, and h:mm:ss only when a track is actually that long (podcasts). */
@@ -309,30 +310,46 @@ function Empty({
   }, [needsAuth])
 
   let title = 'Nothing playing'
-  let body = 'Start something on any Spotify device and it shows up here.'
+  // The idle screen is the disc and three words (USER DECISION 2026-10-25).
+  // Every OTHER branch below sets a body, because those are the ones that
+  // have to explain themselves.
+  let body = ''
+
+  // The disc is for THIS state only (USER DECISION 2026-10-25). Every branch
+  // below is something to fix -- a missing client id, a consent screen, a
+  // backend that cannot be reached -- and a toy spinning over them reads as
+  // the panel not taking the problem seriously.
+  let idle = true
 
   if (loading) {
     title = 'Loading'
     body = ''
+    idle = false
   } else if (error) {
     title = 'Backend unreachable'
     body = error
+    idle = false
   } else if (snapshot?.status === 'unconfigured') {
     title = 'Spotify not set up'
     body = 'SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are not set on the backend. See docs/SPOTIFY.md.'
+    idle = false
   } else if (needsAuth) {
     title = 'Connect Spotify'
     body = 'One consent screen, once. The Pi stays connected afterwards.'
+    idle = false
   } else if (snapshot?.status === 'unreachable') {
     title = 'Spotify unreachable'
     body = 'The backend could not reach Spotify. It will keep trying.'
+    idle = false
   } else if (snapshot?.status === 'rate_limited') {
     title = 'Rate limited'
     body = 'Spotify asked us to slow down. Back shortly.'
+    idle = false
   }
 
   return (
-    <div className="np__empty">
+    <div className={`np__empty${idle ? ' is-idle' : ''}`}>
+      {idle && <IdleDisc />}
       <div className="np__empty-title">{title}</div>
       {body && <p className="np__empty-body">{body}</p>}
       {needsAuth && authUrl && (

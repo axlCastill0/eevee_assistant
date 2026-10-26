@@ -412,18 +412,36 @@
   animation: fade-in var(--dur-slow) var(--ease);
 }
 
+/* The idle state carries the disc, so it needs room the message-only states
+   do not: wider, and with the padding trimmed because the disc brings its
+   own. Laid out as a column so "Nothing playing" sits under the art rather
+   than beside it at wide sizes. */
+.np__empty.is-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: none;
+  padding: var(--space-2);
+}
+
 .np__empty-title {
   font-family: var(--font-head);
   font-size: var(--text-xl);
   font-weight: 600;
-  color: var(--text);
+  /* WHITE, not var(--text). This view's backdrop is the cover's colours (or
+     the neutral dark stand-in) in BOTH themes -- the same reason .np__title
+     and .np__artist are hardcoded. With the themed token, every empty-state
+     message was near-black on near-black in light mode, i.e. invisible. */
+  color: #fff;
 }
 
 .np__empty-body {
   margin-top: var(--space-3);
   font-size: var(--text-base);
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.82);
 }
+
 
 .np__empty-cta {
   display: inline-grid;
