@@ -20,7 +20,32 @@
 }
 
 .idle__bob {
+  position: relative;
   animation: idle-bob 11s var(--ease) infinite;
+}
+
+/* The glow. On the BOB rather than on the disc itself, for two reasons: the
+   disc now has `overflow: hidden` for its circular crop and would clip it,
+   and sitting out here means the glow drifts WITH the disc instead of being
+   a fixed smudge the disc wanders across.
+
+   A radial gradient, not a box-shadow or a filter: the falloff is painted
+   once into a layer the Pi then only has to move. Faint on purpose -- it is
+   there to lift the disc off the background, not to be noticed. */
+.idle__bob::after {
+  content: '';
+  position: absolute;
+  inset: -13%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.07) 46%,
+    rgba(255, 255, 255, 0.02) 62%,
+    transparent 72%
+  );
+  pointer-events: none;
 }
 
 /* The drag target. Sized here rather than on the image so the hit area and

@@ -410,21 +410,34 @@ built from the cover's two dominant colours; see `lib/coverColors.ts`, and
 `docs/SPOTIFY.md` for the whole feature.
 
 When nothing is playing, the view becomes a large dithered disc wandering
-slowly around the centre, with **Nothing playing** under it and nothing else:
+slowly around the centre of a drifting red-into-black backdrop, with a faint
+white glow behind it and no text at all:
 
 ```
 ┌──────────────────────────────────────────────────────┐
+│ ░▒▓ red drifting into black ▓▒░                      │
 │                  ┌──────────────┐                    │
-│                  │   ▓▒░ disc   │   ← drifts, and    │
+│                  │   ( disc )   │   ← drifts, and    │
 │                  │   ░▒▓ art    │     spins if you   │
 │                  └──────────────┘     flick it       │
-│                   Nothing playing                    │
+│                                                      │
 └──────────────────────────────────────────────────────┘
 ```
 
 It is 72% of the screen height, because an idle panel in a room should look
 like something rather than like a failure. The artwork is cropped to a circle,
 so what floats there is a disc rather than a picture of one.
+
+The backdrop is not a new feature — it is a **palette**. This view already
+drifts two blurred blobs and a slow sheen from two custom properties fed by
+the cover's dominant colours; the idle screen simply supplies red and black
+instead. A track starting then crossfades its real cover over it exactly as
+one cover crossfades into another.
+
+One wrinkle worth knowing: the view pauses every background loop when nothing
+is playing, so that the page stops with the music. That is right for a paused
+track and wrong here, where there is no music to stop along with — so the idle
+screen, and only the idle screen, overrides it back to running.
 
 **Drag it left or right** and it spins like a record, carries on with
 momentum, and coasts to a stop while the drift continues underneath. Dragging

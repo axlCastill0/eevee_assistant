@@ -21,7 +21,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { artUrl, fetchSpotifyLogin, type NowPlaying as Snapshot } from '../lib/api'
-import { coverColors, NEUTRAL, type CoverColors } from '../lib/coverColors'
+import { coverColors, IDLE, NEUTRAL, type CoverColors } from '../lib/coverColors'
 import { useLyrics } from '../lib/useLyrics'
 import { useSpotify } from '../lib/useSpotify'
 import { Icon } from '../components/Term'
@@ -54,6 +54,11 @@ export function NowPlaying({ active }: { active: boolean }) {
   const item = data?.status === 'ok' ? data.item : undefined
   const art = item?.art_id ? artUrl(item.art_id) : null
 
+  // The "nothing playing" screen, as opposed to the states that need fixing.
+  // Drives both the disc and the red backdrop behind it; `Empty` reaches the
+  // same conclusion from the same inputs for the text it shows.
+  const isIdle = !loading && !error && data?.status === 'idle'
+
   // Two background layers, swapped on every cover change. `front` says which
   // one is currently visible, so the other is the one to paint into.
   const [layers, setLayers] = useState<[CoverColors, CoverColors]>([NEUTRAL, NEUTRAL])
@@ -61,11 +66,16 @@ export function NowPlaying({ active }: { active: boolean }) {
   const lastArt = useRef<string | null>(null)
 
   useEffect(() => {
-    if (art === lastArt.current) return
-    lastArt.current = art
+    // Keyed on the cover OR, with no cover, on which fallback palette applies.
+    // Without the second half, going from "not set up" to "nothing playing"
+    // would leave the old colours up: both have a null `art`.
+    const key = art ?? (isIdle ? '__idle' : '__neutral')
+    if (key === lastArt.current) return
+    lastArt.current = key
 
     if (!art) {
-      setLayers((prev) => (front === 0 ? [prev[0], NEUTRAL] : [NEUTRAL, prev[1]]))
+      const fallback = isIdle ? IDLE : NEUTRAL
+      setLayers((prev) => (front === 0 ? [prev[0], fallback] : [fallback, prev[1]]))
       setFront((f) => 1 - f)
       return
     }
@@ -81,7 +91,7 @@ export function NowPlaying({ active }: { active: boolean }) {
     return () => {
       cancelled = true
     }
-  }, [art, front])
+  }, [art, isIdle, front])
 
   // Lyrics, from LRCLIB via the backend. Fetched once per track; `null` means
   // the answer for THIS track has not arrived yet, which is what keeps the
@@ -109,6 +119,9 @@ export function NowPlaying({ active }: { active: boolean }) {
          playback stops -- see the animation-play-state rules in the
          stylesheet. */
       data-playing={data?.is_playing ? 'yes' : 'no'}
+      /* Keeps the background moving on the idle screen, which the
+         `data-playing="no"` pause rule would otherwise freeze. */
+      data-idle={isIdle ? 'yes' : 'no'}
       /* Drives the stylesheet: with lyrics up, everything except the moving
          background layers is hidden. */
       data-lyrics={showLyrics && hasLyrics ? 'yes' : 'no'}
@@ -347,9 +360,19 @@ function Empty({
     idle = false
   }
 
+  // The idle screen is the disc and nothing else (USER DECISION 2026-10-25):
+  // no caption, no body. Returning early rather than conditioning each piece
+  // keeps the branch honest -- there is no text here to drift out of sync.
+  if (idle) {
+    return (
+      <div className="np__empty is-idle">
+        <IdleDisc />
+      </div>
+    )
+  }
+
   return (
-    <div className={`np__empty${idle ? ' is-idle' : ''}`}>
-      {idle && <IdleDisc />}
+    <div className="np__empty">
       <div className="np__empty-title">{title}</div>
       {body && <p className="np__empty-body">{body}</p>}
       {needsAuth && authUrl && (

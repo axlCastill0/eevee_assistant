@@ -883,7 +883,27 @@ colours: lib/coverColors.ts draws the cover into a 32x32 canvas, buckets into
 
 idle screen (2026-10-25, USER): components/IdleDisc.tsx. When the status is
   `idle` -- and ONLY then -- the view is a large dithered disc wandering
-  around the centre with "Nothing playing" under it, and no body copy.
+  around the centre on a drifting red-into-black backdrop. NO TEXT AT ALL:
+  the caption went the same day it was added, so `Empty` returns early for
+  this branch rather than conditioning each piece.
+  backdrop: the `IDLE` palette in lib/coverColors.ts (red -> near-black) fed
+    into the view's EXISTING background machinery -- the same two drifting
+    blobs, 90s sheen and crossfade a real cover uses. No second mechanism,
+    and a track starting crossfades its cover over the red exactly as one
+    cover does into another.
+    `data-idle="yes"` on `.np` is what keeps that motion RUNNING: the
+    `data-playing="no"` rule pauses every background loop when the music
+    stops, which is right when a track is paused and wrong here, where there
+    is no music to be stopped along with. The override has the SAME
+    specificity, so it must stay below the pause rule to win.
+    The palette key is `art ?? (isIdle ? '__idle' : '__neutral')` -- keyed on
+    the cover alone, "not set up" -> "nothing playing" would keep the old
+    colours, because both have a null art.
+  glow: a faint white radial gradient on `.idle__bob::after`, not on the disc
+    -- the disc has `overflow: hidden` for its crop and would clip it, and
+    out here the glow drifts WITH the disc instead of being a fixed smudge it
+    wanders across. A gradient rather than a box-shadow or filter: painted
+    once into a layer the Pi then only moves.
   size: 72vh, capped at 76vw. USER asked for "at least 70% of the screen
     height", so there is no upper px clamp: on a taller screen that IS the
     point. Measured 73.5% at 1024x600.
@@ -1659,6 +1679,9 @@ xterm_is_required:
 | 2026-10-25 | the disc spins with CSS + a rAF loop, NOT three.js | USER chose this over the library. Seen face-on, "spin on its own axis" is one rotate(); three.js would add ~170KB and a WebGL context to draw identical pixels on a Pi already compositing a kiosk. Momentum is the one part CSS cannot express, so only the rotation is JS |
 | 2026-10-25 | orbit and spin live on SEPARATE elements | an element has one `transform`. CSS owns the two wrappers, JS owns the inner node, and neither ever writes what the other animates. Same rule the now-playing cover already follows |
 | 2026-10-25 | the disc is 72vh with no px ceiling | USER: "at least 70% the height of the screen". A clamp would quietly break that promise on anything taller than the Pi panel |
+| 2026-10-25 | idle backdrop reuses the cover-colour machinery instead of its own | USER asked for a moving red and black background. The view already drifts two blurred blobs and a sheen from two CSS custom properties, so the idle screen is a PALETTE, not a feature. A track starting then crossfades over it for free |
+| 2026-10-25 | `data-idle` overrides the "pause everything when not playing" rule | that rule is right for a PAUSED track -- the page stops with the music -- and wrong for the idle screen, where there is no music to stop with. Only the idle screen is exempted; a paused track still freezes |
+| 2026-10-25 | the idle caption was removed the same day it was added | USER. The disc says it. Two words under a 72vh disc were explaining something nobody was asking |
 | 2026-10-25 | idle screen carries NO body copy | USER. The disc and three words say it; the sentence about starting a track on another device was explaining something nobody was confused by |
 | 2026-10-25 | empty-state text on the music view is hardcoded white | BUG FIX: it used var(--text), and this view's backdrop is dark in BOTH themes, so every empty-state message was near-black on near-black in light mode. .np__title and .np__artist were already hardcoded for exactly this reason |
 | 2026-10-16 | music view is full bleed, no top bar | USER: the clock, voice pill and connection readout are noise in front of an album cover. The sidebar stays, so there is always a way out of the view |
@@ -1746,6 +1769,26 @@ happen and the behaviour they proved is still the behaviour in the code — but
 they are no longer repeatable. Re-verify by hand.
 
 passed:
+  - "2026-10-25 macOS, vite + the browser pane at 1024x600: the idle screen's
+     red backdrop, white glow and the caption's removal.
+     CAUGHT AND FIXED IN TESTING: the backdrop rendered red but was FROZEN.
+     The pre-existing `.np[data-playing=no]` rule pauses every background
+     loop when nothing is playing, which is exactly the idle state -- so the
+     blobs and the sheen were all `animation-play-state: paused`. Measuring
+     the transforms 1.5s apart is what caught it; the screenshot looked
+     perfect. Fixed with a `data-idle` override below it.
+     VERIFIED after the fix: all three background elements running and their
+     transforms actually changing; palette rgb(150,20,26) -> rgb(11,8,9); the
+     glow present on .idle__bob::after at z-index -1; no caption element in
+     the DOM. Round trip idle -> unconfigured -> idle restores the red and
+     re-pauses correctly for the non-idle state (neutral palette, blobs
+     paused, disc gone, title back). A playing track clears `data-idle`,
+     unmounts the disc and shows the stage. The spin still flicks, coasts and
+     settles through the new glow layer.
+     NOT VERIFIED: real touch on the Pi, and how the now-unpaused background
+     loops cost on a Pi GPU while the panel sits idle for hours -- this is
+     the first state that animates the backdrop indefinitely with nothing
+     playing."
   - "2026-10-25 macOS, vite + the browser pane at 1024x600: the disc's
      circular crop and inverted spin. The crop sits exactly on the disc edge
      with no ring of the artwork's black background and no bracket furniture

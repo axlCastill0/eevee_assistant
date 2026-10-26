@@ -106,6 +106,18 @@
   animation-play-state: paused;
 }
 
+/* ...EXCEPT on the idle screen, where there is no music for the page to be
+   stopped along WITH -- nothing is paused, nothing is loading, there is
+   simply nothing on. USER asked for the red to move there (2026-10-25).
+
+   Same specificity as the rule above, so this must stay BELOW it to win.
+   `data-idle` is set by the view from the same condition that decides to
+   show the disc, so the two can never disagree. */
+.np[data-idle='yes'] .np__blob,
+.np[data-idle='yes'] .np__sheen {
+  animation-play-state: running;
+}
+
 /* ---- stage ---- */
 .np__stage {
   position: relative;

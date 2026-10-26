@@ -47,6 +47,20 @@ export const NEUTRAL: CoverColors = {
   foreground: 'light',
 }
 
+/** The "nothing playing" palette (USER DECISION 2026-10-25): red into black,
+ *  to match the disc's artwork.
+ *
+ *  It is a CoverColors like any other, which is the point -- the idle screen
+ *  reuses the view's existing background machinery (two drifting blobs and a
+ *  90s sheen, crossfaded on change) rather than owning a second one. When a
+ *  track starts, the real cover's colours crossfade in over the top exactly
+ *  as one cover does into another. */
+export const IDLE: CoverColors = {
+  a: 'rgb(150, 20, 26)',
+  b: 'rgb(11, 8, 9)',
+  foreground: 'light',
+}
+
 type Rgb = [number, number, number]
 
 const SIZE = 32
